@@ -1,0 +1,324 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.awt.Dimension;
+import java.awt.DisplayMode;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
+/**A convenience class that creates and initializes a {@link JFrame} window and {@link Painter}. Unless the painting
+ * surface is to be embedded, this is the easiest way to start things.
+ *
+ * @author bsimpkins
+ */
+public class Frame2D
+{
+    public static final int REG_PAINTER = 1;
+    public static final int EVENT_DRIVEN_PAINTER = 2;
+
+    private int painterType = REG_PAINTER;
+
+    public static final int SCALE_NORMAL = 10;
+    public static final int SCALE_FULLSCREEN = 11;
+    public static final int SCALE_SCALED = 12;
+
+    private int scaleMode = SCALE_NORMAL;
+
+    private Painter painter = null;
+
+    private JFrame frame;
+
+    private Dimension size;
+
+    private boolean updateOnFocus = false;
+
+    /**Creates a new Frame2D based on the specified painter type and window size
+     *
+     * @param painterType Type of painter(use class constants).
+     * @param width Width of window
+     * @param height Height of window
+     */
+    public Frame2D(int painterType,int width, int height, boolean fullScreen)
+    {
+        if (painterType != REG_PAINTER && painterType != EVENT_DRIVEN_PAINTER)
+        {
+            System.err.println("Must specifiy a valid painter type (REG_PAINTER or EVENT_DRIVEN_PAINTER)!");
+            System.err.println("Exiting!");
+            System.exit(1);
+        }
+
+        this.painterType = painterType;
+        this.size = new Dimension(width,height);
+
+        if (fullScreen) scaleMode = SCALE_FULLSCREEN;
+        createFrame(size,null);
+
+        
+    }
+
+    /**Creates a new Frame2D based on the specified {@link Painter}, size and display size.
+     * This is a speacial constructor that allows you to set a game resolution (size) and then
+     * rescale the display to the specified displaySize;
+     *
+     * @param painter Non-null <code>Painter</code> object
+     * @param size Size of rendering space
+     * @param displaySize Size of display window
+     */
+    public Frame2D(int painterType, Dimension size, Dimension displaySize)
+    {
+        this.size = size;
+
+        if (painterType != REG_PAINTER && painterType != EVENT_DRIVEN_PAINTER)
+        {
+            System.err.println("Must specifiy a valid painter type (REG_PAINTER or EVENT_DRIVEN_PAINTER)!");
+            System.err.println("Exiting!");
+            System.exit(1);
+        }
+
+        this.painterType = painterType;
+
+        scaleMode = SCALE_SCALED;
+        createFrame(size,displaySize);
+    }
+
+    /**Creates a new Frame2D based on the specified {@link Painter} and window size
+     *
+     * @param painter Non-null <code>Painter</code> object
+     * @param width Width of window
+     * @param height Height of window
+     */
+    public Frame2D(Painter painter,int width, int height, boolean fullScreen)
+    {
+        this.painter = painter;
+        this.size = new Dimension(width,height);
+
+        if (painter instanceof GamePainter) painterType = REG_PAINTER;
+        else if (painter instanceof EventDrivenPainter) painterType = EVENT_DRIVEN_PAINTER;
+
+        if (fullScreen) scaleMode = SCALE_FULLSCREEN;
+        createFrame(size,null);
+    }
+
+    /**Creates a new Frame2D based on the specified {@link Painter}, size and display size.
+     * This is a speacial constructor that allows you to set a game resolution (size) and then
+     * rescale the display to the specified displaySize;
+     *
+     * @param painter Non-null <code>Painter</code> object
+     * @param size Size of rendering space
+     * @param displaySize Size of display window
+     */
+    public Frame2D(Painter painter, Dimension size, Dimension displaySize)
+    {
+        this.painter = painter;
+        this.size = size;
+
+        if (painter instanceof GamePainter) painterType = REG_PAINTER;
+        else if (painter instanceof EventDrivenPainter) painterType = EVENT_DRIVEN_PAINTER;
+
+        scaleMode = SCALE_SCALED;
+        createFrame(size,displaySize);
+    }
+
+    public Frame2D(Painter painter)
+    {
+        this.painter = painter;
+
+        if (painter instanceof GamePainter) painterType = REG_PAINTER;
+        else if (painter instanceof EventDrivenPainter) painterType = EVENT_DRIVEN_PAINTER;
+
+        scaleMode = SCALE_SCALED;
+        createFrame();
+    }
+
+    private void createFrame()
+    {
+        try
+        {
+            SwingUtilities.invokeAndWait(new Runnable()
+            {
+                public void run()
+                {
+                    frame = new JFrame();
+                    DisplayMode dm = frame.getGraphicsConfiguration().getDevice().getDisplayMode();
+                    double width = dm.getWidth();
+                    double height = dm.getHeight();
+                    Dimension size = new Dimension((int)width,(int)height);
+
+                    frame.setSize(size);
+                    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+                    initPainter();
+                }
+            });
+        }catch(Exception e){}
+        this.size = frame.getSize();
+    }
+
+    private void createFrame(final Dimension size, final Dimension displaySize)
+    {
+        try
+        {
+            SwingUtilities.invokeAndWait(new Runnable()
+            {
+                public void run()
+                {
+                    frame = new JFrame();
+
+                    frame.setSize(size);
+                    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                  
+                    initPainter();
+
+
+
+                    if (scaleMode == SCALE_FULLSCREEN) frame.setUndecorated(true);
+
+                    frame.setVisible(true);
+                    if (scaleMode == SCALE_FULLSCREEN) {
+                        setFullScreen(frame, painter.getComponent().getSize());
+                    }
+                    else if (scaleMode == SCALE_SCALED){
+                        setScaledDisplay(frame,size,displaySize);
+                    }
+                }
+            });
+        } catch (Exception e){} 
+    }
+
+    private void setFullScreen(JFrame frame, Dimension pSize)
+    {       
+
+        DisplayMode dm = frame.getGraphicsConfiguration().getDevice().getDisplayMode();
+        double width = dm.getWidth();
+        double height = dm.getHeight();
+
+        double xScale = width/pSize.getWidth();
+        double yScale = height/pSize.getHeight();
+
+        frame.setSize((int)width, (int)height);
+        frame.setVisible(true);
+        painter.setDisplayScale(xScale, yScale);
+
+        
+    }
+    private void setScaledDisplay(JFrame frame, Dimension size, Dimension displaySize)
+    {
+        double xScale = displaySize.getWidth()/size.getWidth();
+        double yScale = displaySize.getHeight()/size.getHeight();
+
+        frame.setSize(displaySize);
+        frame.setVisible(true);
+        painter.setDisplayScale(xScale, yScale);
+    }
+
+    public void setUpdateOnFocus(boolean update)
+    {
+        if (!(painter instanceof EventDrivenPainter) && update)
+        {
+            System.err.println("Frame2D.setUpdateOnFocus: No need to set update on focus for Painter that is not event driven");
+            return;
+        }
+
+        if (update && !updateOnFocus)
+        {
+            updateOnFocus = true;
+            final EventDrivenPainter p = (EventDrivenPainter)painter;
+            frame.addWindowListener(new WindowAdapter()
+            {
+                @Override
+                public void windowActivated(WindowEvent e)
+                {
+                    p.update();
+                }
+            });
+        }
+    }
+
+    private void initPainter()
+    {
+        JPanel panel = null;
+
+        if (painter==null)
+        {
+            if (painterType == REG_PAINTER)
+            {
+                panel = new JPanel();
+                painter = new GamePainter(panel);
+            }
+            else if (painterType == EVENT_DRIVEN_PAINTER)
+            {
+                if (painter==null) painter = new EventDrivenPainter();
+
+            }
+        }
+
+        if (painter instanceof GamePainter)
+        {
+            if (panel == null)
+            {
+                panel = new JPanel();
+            }
+
+            frame.getContentPane().add(panel);
+        }
+            
+        else if (painter instanceof EventDrivenPainter)
+        {
+            frame.getContentPane().add((EventDrivenPainter)painter);
+        }
+
+    }
+
+    /**Returns the {@link Painter}
+     *
+     * @return The <code>Painter</code> created by this class
+     */
+    public Painter getPainter()
+    {
+        return painter;
+    }
+
+    /**Returns the window created by this class
+     *
+     * @return {@link JFrame}
+     */
+    public JFrame getFrame()
+    {
+        return frame;
+    }
+
+    /**Returns the {@link Painter} type (class constants)
+     *
+     * @return painter type
+     */
+    public int getPainterType()
+    {
+        return painterType;
+    }
+
+    public static void main(String[] args)
+    {
+        Frame2D main = new Frame2D(Frame2D.REG_PAINTER,200,200,false);
+        Painter painter = main.getPainter();
+
+
+        FlipBookSprite explo = new FlipBookSprite("/images/Explosion/Explosion.gif");
+        Dimension compSize = painter.getSize();
+        explo.setLocation(compSize.width/2, compSize.height/2);
+        explo.setFramesToRenderImage(2);
+        explo.animateLoop();
+
+        //explo.setBoundsVisible(true);
+        explo.setPainter(painter);
+        explo.scale(2f);
+
+        painter.addToPaintList(explo);
+    }
+}

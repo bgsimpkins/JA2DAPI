@@ -1,0 +1,83 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import javax.swing.JComponent;
+
+/**Interface that defines standard for a layered render driver. Classes that implement this should handle
+ * update and rendering of {@link Paintable} objects.
+ *
+ * @author bsimpkins
+ */
+public interface Painter
+{
+    
+    /**For the layer the specified <code>Paintable</code> is in, this gives the index of it's
+     * position (layer within the layer).
+     * @param paintable A <code>Paintable</code>.
+     * @return The position of the <code>Paintable</code> within the layer it is currently being rendered. Return -1 if the <code>Paintable</code> cannot be found
+     */
+    public int getPositionInLayer(Paintable paintable);
+
+    /**Brings a <code>Paintable</code> to the front of the layer it is in (so it is renderer last/on top).
+     *
+     * @param paintable <code>Paintable</code> to bring to front.
+     */
+    public void bringToFront(Paintable paintable);
+
+    /**Adds a paintable to the lowest layer
+     *
+     * @param paintable Paintable object
+     */
+    public void addToPaintList(Paintable paintable);
+
+    /**Adds a paintable to the specified layer
+     *
+     * @param paintable Paintable object
+     * @param layer The layer at which to add the Paintable
+     */
+    public void addToPaintList(Paintable paintable, int layer);
+
+    /**Removes a Paintable from the paint list
+     *
+     * @param paintable Paintable object
+     */
+    public void removeFromPaintList(Paintable paintable);
+
+    /**Sets the background color
+     *
+     * @param background Background color
+     */
+    public void setBackground(Color background);
+
+    /**Gets the background color
+     *
+     * @return Background color
+     */
+    public Color getBackground();
+
+    /**Gets the <code>JComponent</code> this Painter is painting on.
+     *
+     * @return Component being painted on.
+     */
+    public JComponent getComponent();
+
+    /**Removes all {@link Paintable}s*/
+    public void removeAll();
+
+    /**Takes a snapshot of the current render and saves it to file
+     *
+     * @param filename Name of the file to save
+     * @param type Image type ("png","gif","bmp","jpg", for eg).
+     */
+    public void saveScreenshot(String filename, String type);
+
+    public void setDisplayScale(double x, double y);
+
+    public Dimension getSize();
+}

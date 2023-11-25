@@ -1,0 +1,814 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+//import java.awt.AlphaComposite;
+//import java.awt.RenderingHints;
+
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Dimension;
+import java.awt.image.BufferedImage;
+//import java.awt.image.VolatileImage;
+import java.awt.Color;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
+import java.awt.Shape;
+//import java.awt.RenderingHints;
+
+import java.awt.geom.*;
+//import java.awt.BasicStroke;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
+
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+
+/**A 2D sprite that can be animated using keyframe animation (without interpolation). It uses a flexible
+ * image strip approach that allows multiple animations to be stored for a single sprite. The image strip
+ * is a one-dimensional array of key frames. The extending/implementing class can set the beginning and end
+ * frame of the animation sequence within the image strip, and animate just this section of the strip. For
+ * example, an image strip may contain a running animation in elements 0-6 and a jumping animation in elements
+ * 7-9. Beyond the animation feature, this class also contains convenience methods identical to {@link Sprite2D}
+ * that allow for easy transformations and collision detection.
+ *
+ * @author ben
+ */
+public class FlipBookSprite implements Paintable 
+{
+    private Shape shape = null;
+    
+    //private static final int IMAGE = 1;
+    //private static final int VOLATILE_IMAGE = 2;
+    
+    //private int spriteType = 1;
+    
+    private BufferedImage[] images = null;
+    
+    /**Index for image that is currently being rendered*/
+    private int imageIndex = 0;
+    
+    /**Number of frames each image will be displayed*/
+    private int frameDuration = 1;
+    
+    /**Increments each time a frame is updated(and rendered, hopefully)*/
+    private int frameCounter = 0;
+            
+    private AffineTransform transform = new AffineTransform();
+    private Point location = new Point(0,0);
+    private Dimension size = null;
+    
+    private double theta = 0;
+
+    private double scale = 1;
+    
+    private Rectangle boundsRect = new Rectangle();
+    
+    private Shape transformedRect;
+    
+    private boolean drawBounds = false;
+    
+    private boolean isVisible = true;
+    
+    //private JComponent comp = null;
+    private Painter painter = null;
+    
+    private boolean screenWrap = false;
+
+    private boolean animating = false;
+
+    private boolean looping = false;
+
+    private int startingFrameIndex = 0;
+
+    private int endingFrameIndex;
+
+
+    private Dimension originalSize = null;
+
+    private boolean antiAlias = false;
+
+    //private double widthDiff = 0;
+    //private double heightDiff = 0;
+
+    /**Creates a new instance of FlipBookSprite with the specified images for the keyframes
+     *
+     * @param images Images to be used for the keyframes
+     */
+    public FlipBookSprite(BufferedImage[] images)
+    {
+        this.images = images;
+
+        endingFrameIndex = images.length - 1;
+
+        size = new Dimension(images[0].getWidth(),images[0].getHeight());
+        originalSize = new Dimension(size);
+        boundsRect.setRect(0,0,size.width,size.height);
+        //spriteCenter = new Point(size.width/2,size.height/2);
+        //location.setLocation(spriteCenter);       
+    }
+
+    /**Creates a new instance of FlipBookSprite with the specified filenames for the images to be used the keyframes
+     *
+     * @param fileNames File path to the keyframe images
+     */
+    public FlipBookSprite(String[] fileNames)
+    {
+        images = new BufferedImage[fileNames.length];
+        for (int i = 0; i < images.length; i++)
+        {
+            try{
+                images[i] = ImageIO.read(this.getClass().getResource(fileNames[i]));
+                endingFrameIndex = images.length - 1;
+
+                //location.setLocation(spriteCenter);
+            }catch(IOException e)
+            {
+                System.err.println("Cannot load image file "+fileNames[i]+" for FlipBookSprite. Exiting!");
+                System.exit(1);
+            }
+        }
+        size = new Dimension(images[0].getWidth(),images[0].getHeight());
+        originalSize = new Dimension(size);
+        boundsRect.setRect(0,0,size.width,size.height);
+        //spriteCenter = new Point(size.width/2,size.height/2);
+    }
+
+    public FlipBookSprite(String gifFile)
+    {
+
+        ImageInputStream stream = null;
+        try {
+            InputStream input = this.getClass().getResourceAsStream(gifFile);
+            stream = ImageIO.createImageInputStream(input);
+
+            Iterator readers = ImageIO.getImageReaders(stream);
+            if (!readers.hasNext())
+            {
+                System.out.println("Couldn't get image reader for FlipBookSprite. Exiting!");
+                System.exit(1);
+            }
+
+            ImageReader reader = (ImageReader) readers.next();
+            reader.setInput(stream);
+            int n = reader.getNumImages(true);
+            images = new BufferedImage[n];
+            endingFrameIndex = n - 1;
+
+            //System.out.println("numImages = " + n);
+            for (int i = 0; i < n; i++)
+            {
+                BufferedImage image = reader.read(i);
+                images[i] = image;
+
+            }
+            stream.close();
+
+        } catch (IOException ex)
+        {
+            System.err.println("Cannot load image file "+gifFile+" for FlipBookSprite. Exiting!");
+                System.exit(1);
+        }
+
+        size = new Dimension(images[0].getWidth(),images[0].getHeight());
+        originalSize = new Dimension(size);
+        boundsRect.setRect(0,0,size.width,size.height);
+        //spriteCenter = new Point(size.width/2,size.height/2);
+     
+    }
+
+    /**Sets the {@link Painter} to be used by this sprite. Painter must be set in order to perform scaling
+     * and screen wrap
+     * @param painter <code>Painter</code>
+     */
+    public void setPainter(Painter painter)
+    {
+        this.painter = painter;
+    }
+    
+    /**Sets the number of frames that each keyframe image is to be displayed. For example, a <code>numFrames</code>
+     *of 1 sets it so a new keyframe is rendered each frame update. NOTE: The time of duration of each keyframe
+     *depends on the frame rate that is being used.
+     *@param numFrames Number of frames for which each keyframe is displayed (Default = 1)
+     */
+    public void setFramesToRenderImage(int numFrames)
+    {
+        frameDuration = numFrames;
+    }
+    
+    /*public void createVolatileImage()
+    {
+        vImage = comp.createVolatileImage(size.width,size.height);
+ 
+        if (vImage == null) 
+        {
+            System.err.println("Volatile image null in "+getClass().toString()+". Make sure component is displayable.");
+            System.err.println("Exiting!");
+            System.exit(1);
+        
+        }
+        Graphics2D g2 = null;
+        
+        try
+        {
+            g2 = vImage.createGraphics();                  
+            
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.CLEAR));
+            g2.setColor(new Color(0,0,0,0));
+            g2.fillRect(0, 0, size.width, size.height); 
+
+            g2.setComposite(AlphaComposite.SrcOver);
+
+            g2.drawImage(image,null,0,0);
+            
+            System.out.println("Created volatile image for "+this.getClass().toString());
+             
+        }
+        finally
+        {
+            g2.dispose();
+        }
+    }*/
+    
+    /*public void setUseVolatileImage(JComponent comp)
+    {
+        this.comp = comp;
+        spriteType = VOLATILE_IMAGE;
+    }*/
+
+    /**Sets the location of the sprite in the panel (coordinates are center of sprite)
+     *
+     * @param x x position of the sprite
+     * @param y y position of the sprite
+     */
+    public void setLocation(int x, int y)
+    {
+        location.setLocation(x,y);
+    }
+
+    /**Sets the location of the sprite in the panel (coordinates are center of sprite)
+     *
+     * @param point Location of the sprite
+     */
+    public void setLocation(Point point)
+    {
+        setLocation(point.x,point.y);
+    }
+
+    /**Moves the sprite the specified amount
+     *
+     * @param x Amount to move along the x dimension
+     * @param y Amount to move along the y dimension
+     */
+    public void move(int x, int y)
+    {
+        this.location.x = this.location.x + x;
+        this.location.y = this.location.y + y;
+    }
+
+    /**Radial move. Moves the sprite the specified distance in the specified direction.
+     *
+     * @param theta Angle/direction of movement (in radians)
+     * @param distance Distance to move
+     */
+    public void move(double theta, int distance)
+    {
+        this.location.x = this.location.x + (int)Math.round(Math.cos(theta-Math.PI/2) * distance);
+        this.location.y = this.location.y + (int)Math.round(Math.sin(theta-Math.PI/2) * distance);
+    }
+
+    /**Sets the rotation of the sprite
+     *
+     * @param theta rotation of the sprite (in radians)
+     */
+    public void setRotation(double theta)
+    {
+        this.theta = theta;
+    }
+
+    /**Returns the rotation of the sprite
+     *
+     * @return rotation of the sprite (in radians)
+     */
+    public double getRotation()
+    {
+        return theta;
+    }
+
+    /**Rotates the sprite the specified amount (in radians)
+     *
+     * @param theta amount to rotate (in radians)
+     */
+    public void rotate(double theta)
+    {
+        this.theta += theta;
+        
+        //check for wraparound
+        if (this.theta > 2*Math.PI)
+            this.theta = this.theta - 2*Math.PI;
+        
+        else if (this.theta < 0)
+            this.theta = 2*Math.PI + this.theta;
+    }
+
+    /**Returns the location of the sprite
+     *
+     * @return Location of the sprite
+     */
+    public Point getLocation()
+    {
+        return location;
+    }
+
+    /**Sets the scale of the sprite
+     *
+     * @param scale scale of the sprite (scalar)
+     */
+     public void setScale(double scale)
+    {
+        /*if (painter == null)
+        {
+            System.err.println(this.getClass().getName()+": Cannot scale because container Painter has not been specified (setPainter())");
+            return;
+        }*/
+
+        this.scale = scale;
+        this.size.setSize(originalSize.getWidth()*scale, originalSize.getHeight()*scale);
+        /*
+        double oldWidth = size.getWidth();
+        double oldHeight = size.getHeight();
+
+        
+
+        //this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+
+        double widthDiff = (size.getWidth() - oldWidth)/2.0d;
+        double heightDiff = (size.getHeight() - oldHeight)/2.0d;
+
+        location.setLocation(location.getX()-widthDiff,location.getY()-heightDiff);
+
+        toScale = true;*/
+
+    }
+
+     /**Returns the scale of the sprite
+     *
+     * @return scale of the sprite (scalar)
+     */
+    public double getScale()
+    {
+        return scale;
+    }
+
+    /**Scales the sprite the specified amount
+     *
+     * @param ratio amount to scale (scalar)
+     */
+    public void scale(double ratio)
+    {
+        /*if (painter == null)
+        {
+            System.err.println(this.getClass().getName()+": Cannot scale because container Painter has not been specified (setPainter())");
+            return;
+        }*/
+
+        this.scale *= ratio;
+        this.size.setSize(originalSize.getWidth()*scale, originalSize.getHeight()*scale);
+
+        /*double oldWidth = size.getWidth();
+        double oldHeight = size.getHeight();
+
+        
+
+        //this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+
+        double widthDiff = (size.getWidth() - oldWidth)/2.0d;
+        double heightDiff = (size.getHeight() - oldHeight)/2.0d;
+
+        location.setLocation(location.getX()-widthDiff,location.getY()-heightDiff);
+
+        toScale = true;*/
+    }
+
+    /**Sets a bilinear interpolation render hint. This is useful if the sprite is to be scaled
+     * and it needs to not look pixelated.
+     *
+     * @param b True if to be interpolated
+     */
+    public void setBilinearInterpolation(boolean b)
+    {
+        this.antiAlias = b;
+    }
+
+    /**True if bilinear interpolation is being used.
+     *
+     * @return True if interpolated
+     */
+    public boolean isBilinearInterpolation()
+    {
+        return antiAlias;
+    }
+
+    /**Returns the size of the sprite
+     *
+     * @return size of the sprite
+     */
+    public Dimension getSize()
+    {
+        return size;
+    }
+    
+    /**Returns the rectangular collsion bounds for this sprite
+     * 
+     * @return {@link Shape} object
+     */
+    public Shape getCollisionBounds()
+    {
+        return transformedRect;
+    }
+    
+    /**Returns <code>true</code> if this sprite collides with <code>otherSprite</code>
+     * 
+     * @param otherSprite Other sprite being checked for collision
+     * @return True if sprites have collided
+     */
+    public boolean collidesWith(Sprite2D otherSprite)
+    {
+        if (transformedRect != null && otherSprite.isVisible() && otherSprite.getCollisionBounds() != null)
+            return (isVisible && transformedRect.intersects(otherSprite.getCollisionBounds().getBounds()));
+        else return false;
+    }
+
+    /**Returns <code>true</code> if this sprite collides with <code>otherSprite</code>
+     *
+     * @param otherSprite Other sprite being checked for collision
+     * @return True if sprites have collided
+     */
+    public boolean collidesWith(FlipBookSprite otherSprite)
+    {
+        if (transformedRect != null && otherSprite.isVisible() && otherSprite.getCollisionBounds() != null /*&& updated*/)
+            return (isVisible && transformedRect.intersects(otherSprite.getCollisionBounds().getBounds()));
+        else return false;
+    }
+    
+    /**Used for diagnostics. If <code>true</code>, draws an orange rectangle to outline the 
+     * bounds used for collision detection.
+     * @param draw True if collision detection bounds are to be drawn.
+     */
+    public void setBoundsVisible(boolean draw)
+    {
+        this.drawBounds = draw;
+    }
+    
+    /**Returns whether the orange rectangle outline collision bounds is being 
+     * drawn for diagnostic purposes.
+     * @return draw True if collision detection bounds are to be drawn.
+     */
+    public boolean boundsVisible()
+    {
+        return drawBounds;
+    }
+
+
+    /**Set to true if the sprite is visible
+     *
+     * @param visible true if the sprite is visible
+     */
+    public void setVisible(boolean visible)
+    {
+        this.isVisible = visible;
+    }
+
+    /**Returns true if the sprite is visible
+     *
+     * @return true if the sprite is visible
+     */
+    public boolean isVisible()
+    {
+        return isVisible;
+    }
+
+    /**Returns true if the sprite is off the paint surface.
+     *
+     * @param painter The {@link Painter}
+     * @return True if offscreen
+     */
+    public boolean isOffscreen(Painter painter)
+    {
+        boolean returnBool = false;
+
+        Dimension compSize = painter.getSize();
+
+        if ((location.x+size.width < 0) ||
+                (location.x > compSize.width) ||
+                (location.y+size.height < 0) ||
+                (location.y > compSize.height))
+        {
+            returnBool = true;
+        }
+        return returnBool;
+    }
+
+    /**Returns true if the sprite is off the paint surface.
+     * @return True if offscreen
+     */
+    public boolean isOffscreen()
+    {
+        if (this.painter == null)
+        {
+            System.err.println(this.getClass().getName()+": Cannot return accurate isOffscreen() because container Painter has not been specified (setPainter())");
+            return false;
+        }
+
+        boolean returnBool = false;
+
+        Dimension compSize = painter.getSize();
+
+        if ((location.x+size.width < 0) ||
+                (location.x > compSize.width) ||
+                (location.y+size.height < 0) ||
+                (location.y > compSize.height))
+        {
+            returnBool = true;
+        }
+        return returnBool;
+
+    }
+    /**Sets the screen wrap (wraps horizontally and vertically if <code>wrap</code> is true
+     *
+     * @param wrap Set to true to turn on screen wrap
+     * @param painter {@link Painter}
+     */
+    public void setScreenWrap(boolean wrap,Painter painter)
+    {
+        this.screenWrap = wrap;
+        
+        /*if (this.comp == null)*/ this.painter = painter;
+        //System.out.println("Comp width: "+comp.getSize().width);
+    }
+    
+    private void screenWrap()
+    {
+        Dimension pSize = painter.getSize();
+
+        //goes off left side of screen
+        if (getLocation().x < -getSize().width/2)
+        {
+            setLocation(pSize.width + getSize().width/2,getLocation().y);
+        }
+
+        //goes off right side
+        else if (getLocation().x - getSize().width/2 > pSize.width)
+        {
+            setLocation(-getSize().width/2,getLocation().y);
+        }
+
+        //goes off top of screen
+        if (getLocation().y < -getSize().height/2)
+        {
+            setLocation(getLocation().x,pSize.height+getSize().height/2);
+        }
+
+        //goes off bottom
+        else if (getLocation().y - getSize().height/2 > pSize.height)
+        {
+            setLocation(getLocation().x,-getSize().height/2);
+        }
+    }
+
+    /**Animates the sprite once*/
+    public void animateOnce()
+    {
+        this.imageIndex = startingFrameIndex;
+        animating = true;
+        looping = false;
+    }
+
+    /**Animates the sprite repeatedly until <code>stopAnimation()</code> is called*/
+    public void animateLoop()
+    {
+        this.imageIndex = startingFrameIndex;
+        animating = true;
+        looping = true;
+    }
+
+    /**Stops an ongoing animation*/
+    public void stopAnimation()
+    {
+        animating = false;
+        looping = false;
+    }
+
+    /**Sets the index of the image to be displayed in the next
+     * render
+     *
+     * @param frame Index of image to be displayed
+     */
+    public void setFrameIndex(int frame)
+    {
+        this.imageIndex = frame;
+    }
+
+    /**Returns the index of the image to be displayed in the next
+     * render
+     *
+     * @return Index of image to be displayed
+     */
+    public int getFrameIndex()
+    {
+        return imageIndex;
+    }
+
+    /**Returns true if the sprite is currently animated*/
+    public boolean isAnimated()
+    {
+        return animating;
+    }
+
+    /**Sets the frame index for the start of the animation. Once animation starts,
+     * this will be the first frame drawn.
+     * @param startingFrame The index of the image to draw first
+     */
+    public void setStartingFrameIndex(int startingFrame)
+    {
+        this.startingFrameIndex = startingFrame;
+    }
+
+    /**Sets the frame index for the end of the animation. Once animation starts,
+     * this will be the last frame drawn.
+     * @param endingFrame The index of the image to draw last
+     */
+    public void setEndingFrameIndex(int endingFrame)
+    {
+
+        if (endingFrame <= startingFrameIndex)
+        {
+            System.err.println(this.getClass()+": Ending frame index set to greater than starting frame index. Are you on drugs?");
+        }
+        this.endingFrameIndex = endingFrame;
+    }
+
+    /**Sets the beginning and end animation keyframe indices
+     *
+     * @param startingFrame Index of the start frame of the animation
+     * @param endingFrame Index of the end frame of the animation
+     */
+    public void setAnimationFrameIndices(int startingFrame, int endingFrame)
+    {
+        this.startingFrameIndex = startingFrame;
+
+        if (endingFrame <= startingFrameIndex)
+        {
+            System.err.println(this.getClass()+": Ending frame index set to greater than starting frame index. Are you on drugs?");
+        }
+        this.endingFrameIndex = endingFrame;
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void paintObject(Graphics g)
+    {
+        if (isVisible)
+        {
+            Graphics2D g2 = (Graphics2D)g;        
+
+            //g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            /*if (spriteType == VOLATILE_IMAGE && vImage == null)
+            {
+                createVolatileImage();
+            }           
+            
+            if (spriteType == VOLATILE_IMAGE)
+            {
+                Graphics2D vg2 = (Graphics2D)vImage.getGraphics();
+                
+                vg2.setComposite(AlphaComposite.getInstance(AlphaComposite.CLEAR));
+                vg2.setColor(new Color(0,0,0,0));
+            
+                vg2.fillRect(0, 0, size.width, size.height);
+                           
+                vg2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC));
+                
+                vg2.drawImage(image,null,0,0);
+                g2.drawImage(vImage,transform,null);
+            }*/
+            //else if (spriteType == IMAGE)
+            //{
+
+            if (antiAlias) g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2.drawImage(images[imageIndex], transform, null);
+            if (antiAlias) g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            
+            //}
+            
+            if (drawBounds)
+            {
+                g2.setColor(Color.ORANGE);
+                g2.draw(transformedRect);
+            }
+        }
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void update(float interpolation)
+    {               
+        updateState(interpolation);
+
+        if (screenWrap)
+        {
+            screenWrap();
+        }
+
+        transform.setToIdentity();
+        transform.translate(location.getX(), location.getY());
+        transform.scale(scale, scale);
+        transform.rotate(theta);
+
+        transform.translate(-originalSize.getWidth()/2, -originalSize.getHeight()/2);
+
+        //transform = new AffineTransform();
+
+        /*transform.setToTranslation(location.getX(), location.getY());
+
+        //TODO: Need to optimize: need to change transform instead of resetting it each time
+
+        transform.rotate(theta, spriteCenter.x, spriteCenter.y);
+
+        //if (toScale)
+        if (scale != 1.0)
+        {
+            Dimension compSize = painter.getSize();
+
+            transform.translate((compSize.width/2-spriteCenter.getX()-location.getX()), (compSize.height/2-spriteCenter.getY()-location.getY()));
+            transform.scale(scale, scale);
+            transform.translate((-compSize.width/2+spriteCenter.getX()+location.getX())/scale, (-compSize.height/2+spriteCenter.getY()+location.getY())/scale);
+            //transform.translate(-compSize.width/2+spriteCenter.getX()+location.getX(), -compSize.height/2+spriteCenter.getY()+location.getY());
+            this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+            toScale = false;
+
+            //transform.translate(location.x,location.y);
+        }*/
+
+        //TODO: This needs optimization: A new is Shape object is created here.
+        transformedRect = transform.createTransformedShape(boundsRect);
+
+        //updated = true;
+
+        if (animating) updateAnimationState();
+    }
+
+    /**Override to specify custom state updates
+     *
+     * @param interpolation Amount of time (in secs) since last update
+     */
+    public void updateState(float interpolation){}
+
+    private void updateAnimationState()
+    {
+        frameCounter++;
+
+        //if number of frames that have passed exceeds frame duration, increment index to draw next image
+        if (frameCounter > frameDuration)
+        {
+            imageIndex++;
+
+            if (imageIndex >= images.length || imageIndex > endingFrameIndex)
+            {
+                if (looping) imageIndex = startingFrameIndex;
+                else
+                {
+                    imageIndex = images.length - 1;
+                    animating = false;
+                }
+            }
+
+            frameCounter = 0;
+        }
+    }
+
+    public static void main(String[] args)
+    {
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,800,600,false);
+        FlipBookSprite exp = new FlipBookSprite("/images/Explosion/Explosion.gif"){
+            public void updateState(float interpolation)
+            {
+                scale(1+.2*interpolation);
+                //rotate(Math.PI*interpolation);
+            }
+        };
+
+        exp.setFramesToRenderImage(2);
+        exp.setLocation(200,200);
+        exp.setPainter(frame.getPainter());
+        exp.scale(3);
+        frame.getPainter().addToPaintList(exp);
+        exp.animateLoop();
+    }
+}

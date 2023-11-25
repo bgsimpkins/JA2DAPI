@@ -1,0 +1,138 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import java.awt.Point;
+import java.util.ArrayList;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.util.vector.Vector2f;
+import org.lwjgl.util.vector.Vector3f;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class PolygonGL implements PaintableGL
+{
+
+    private ArrayList<Vector2f> vertices = new ArrayList();
+    private ArrayList<Vector3f> colors = new ArrayList();
+
+    private Point location = new Point();
+
+    private float alpha = 1f;
+
+    public void addVertices(Vector2f[] verts)
+    {
+        for (int i = 0; i < verts.length;i++)
+        {
+            vertices.add(verts[i]);
+        }
+    }
+
+    public void addVertex(Vector2f vert)
+    {
+        vertices.add(vert);
+    }
+
+    public void clearVertices()
+    {
+        vertices.clear();
+    }
+
+    public void addColors(Vector3f[] cs)
+    {
+        for (int i = 0; i < cs.length; i++)
+        {
+            colors.add(cs[i]);
+        }
+    }
+
+    public void addColor(Vector3f c)
+    {
+        this.colors.add(c);
+    }
+
+    public void clearColor()
+    {
+        colors.clear();
+    }
+
+    public void setLocation(int x, int y)
+    {
+        location.setLocation(x, y);
+    }
+
+    public Point getLocation()
+    {
+        return location;
+    }
+
+    public void draw(float interpolation)
+    {
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+
+        boolean multiColor = false;
+
+        if (colors.size() > 1) multiColor = true;
+
+        if (!multiColor)
+        {
+            Vector3f color = colors.get(0);
+            GL11.glColor4f(color.x,color.y,color.z,alpha);
+        }
+        //GL11.glLineWidth(2f);
+        GL11.glBegin(GL11.GL_POLYGON);
+        {
+            for (int i = 0; i < vertices.size(); i++)
+            {
+                if (multiColor)
+                {
+                    Vector3f color = colors.get(i);
+                    GL11.glColor4f(color.x,color.y,color.z,alpha);
+                }
+                Vector2f vert = vertices.get(i);
+
+                GL11.glVertex2f(location.x+vert.x, location.y+vert.y);
+                
+            }
+
+
+
+        }
+        GL11.glEnd();
+
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+    }
+
+    public static void main(String[] args)
+    {
+	GLPainter painter = new GLPainter(800,600)
+	{
+            PolygonGL p;
+            @Override
+            public void gameInit()
+	    {
+                p = new PolygonGL();
+                p.setLocation(200,200);
+                p.addVertex(new Vector2f(0,200));
+                p.addVertex(new Vector2f(100,100));
+                p.addVertex(new Vector2f(100,-100));
+                p.addVertex(new Vector2f(-100,-100));
+                p.addVertex(new Vector2f(-100,100));
+
+                p.addColor(new Vector3f(1,1,1));
+                p.addColor(new Vector3f(.8f,.8f,.8f));
+                p.addColor(new Vector3f(.6f,.6f,.6f));
+                p.addColor(new Vector3f(.4f,.4f,.4f));
+                p.addColor(new Vector3f(.2f,.2f,.2f));
+
+                this.addToPaintList(p);
+            }
+	};         
+    }
+
+}

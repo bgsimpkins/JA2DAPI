@@ -1,0 +1,59 @@
+/*
+ * Asteroid.java
+ *
+ * Created on August 3, 2009, 10:49 PM
+ *
+ * To change this template, choose Tools | Template Manager
+ * and open the template in the editor.
+ */
+
+package GameTest;
+
+import twodapi.core.*;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class AsteroidSprite extends Sprite2D
+{
+    int moveAmt = 0;
+    double moveTheta = 0d;
+
+    double rotAmt = 0;
+
+    private GameTest game;
+    
+    /** Creates a new instance of Asteroid */
+    public AsteroidSprite(GameTest game)
+    {
+        super("/images/Asteroid.gif");
+
+        this.game = game;
+
+        double randomAngle = 2*Math.PI*Math.random();
+        double randomLength = Math.random();
+        
+        moveAmt = (int)Math.round(600*randomLength);
+
+
+        moveTheta = randomAngle;
+
+        rotAmt = Math.PI/12*Math.random();
+    }
+
+    public void explode()
+    {
+        setVisible(false);
+        game.showExplosion(getLocation().x, getLocation().y);
+    }
+
+    @Override
+    public void updateState(float interpolation)
+    {
+        move(moveTheta,(int)(moveAmt*interpolation));
+        rotate(rotAmt);
+
+    }
+    
+}

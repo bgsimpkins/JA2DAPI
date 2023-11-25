@@ -1,0 +1,63 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package GameTest;
+
+import java.awt.Point;
+import twodapi.core.FlipBookSprite;
+import twodapi.core.Painter;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class Explosion extends FlipBookSprite
+{
+
+    private Painter painter;
+
+    public Explosion(Painter painter)
+    {
+        super(new String[]{
+            "/images/Explosion/Explosion1.gif",
+            "/images/Explosion/Explosion2.gif",
+            "/images/Explosion/Explosion3.gif",
+            "/images/Explosion/Explosion4.gif",
+            "/images/Explosion/Explosion5.gif",
+            "/images/Explosion/Explosion6.gif",
+            "/images/Explosion/Explosion7.gif",
+            "/images/Explosion/Explosion8.gif",
+            "/images/Explosion/Explosion9.gif",
+            "/images/Explosion/Explosion10.gif",
+            "/images/Explosion/Explosion11.gif",
+            "/images/Explosion/Explosion12.gif",
+            "/images/Explosion/Explosion13.gif",
+            "/images/Explosion/Explosion14.gif",
+            "/images/Explosion/Explosion15.gif",
+            "/images/Explosion/Explosion16.gif"});
+
+        setPainter(painter);
+        setAntialias(true);
+        setFramesToRenderImage(1);
+        setScale(3);
+        setVisible(false);
+    }
+
+
+    @Override
+    public void updateState(float interpolation)
+    {
+        if (!isVisible()) return;
+
+        //if last frame is shown, make explosion disappear
+        if (this.getFrameIndex() >= 15)
+        {
+            setVisible(false);
+        }
+
+    }
+
+
+}

@@ -1,0 +1,85 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package GameTest.GL;
+
+import java.awt.Point;
+import org.lwjgl.input.Keyboard;
+import twodapi.lwjgl.FlipBookSpriteGL;
+import twodapi.lwjgl.GLPainter;
+import twodapi.lwjgl.ScrollerGL;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class GLTest extends GLPainter
+{
+    private ScrollerGL scroller;
+
+    private FlipBookSpriteGL ship;
+
+    public GLTest()
+    {
+        super(1024,786);
+        
+    }
+
+    @Override
+    public void gameInit()
+    {
+        initStarfield();
+
+        ship = new FlipBookSpriteGL(new String[]{"/images/2dShip1.png","/images/2dShip_down.png","/images/2dShip_up.png"});
+        ship.setScale(.2f, .2f);
+        ship.setLocation(100, 100);
+        addToPaintList(ship,1);
+    }
+
+    private void initStarfield()
+    {
+        scroller = new ScrollerGL(null,null,this);
+        //
+        scroller.addLayer("/images/stars/stars1.png",new Point(0,0));
+        scroller.addLayer("/images/stars/stars2.png", new Point(0,0));
+        //scroller.addLayer("/images/stars/stars3a.jpeg",new Point(0,0));
+        scroller.setParallax(.4f);
+
+        this.addToPaintList(scroller);
+    }
+
+    @Override
+    public void gameUpdate(float interpolation)
+    {
+        scroller.scroll(interpolation*500, 0);
+
+        if (Keyboard.isKeyDown(Keyboard.KEY_DOWN)) {
+            ship.imageIndex = 1;
+            ship.move(0, 300*interpolation);
+            
+        }
+        else if (Keyboard.isKeyDown(Keyboard.KEY_UP)) {
+            ship.imageIndex = 2;
+            ship.move(0, -300*interpolation);
+        }
+        else {
+            ship.imageIndex = 0;
+        }
+
+        if (Keyboard.isKeyDown(Keyboard.KEY_RIGHT))
+        {
+            ship.move(300*interpolation,0);
+        }
+        else if (Keyboard.isKeyDown(Keyboard.KEY_LEFT))
+        {
+            ship.move(-300*interpolation,0);
+        }
+    }
+
+    public static void main (String[] args)
+    {
+        new GLTest();
+    }
+}

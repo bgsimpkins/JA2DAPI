@@ -1,0 +1,107 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import java.awt.Dimension;
+import java.awt.image.BufferedImage;
+import java.awt.image.PixelGrabber;
+import java.awt.image.PixelGrabber;
+import java.io.IOException;
+import java.net.URL;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.imageio.ImageIO;
+
+/**
+ *
+ * @author ben
+ */
+public class ImageMapScrollerGL extends ScrollerGL
+{
+    private int grainSize;
+
+    private Dimension imageSize;
+    public ImageMapScrollerGL(String inputFile, GLPainter painter, int grainSize)
+    {
+        super(inputFile,null,painter);
+        this.grainSize = grainSize;
+        initialize(inputFile,null);
+    }
+
+    @Override
+    //ImagePaths parameter not used here (passed in as null in constructor)
+    protected void initialize(String file,String[] imagePaths)
+    {
+        if (!file.startsWith("/")) file = "/"+file;
+        URL url = getClass().getResource(file);
+        BufferedImage image = null;
+        try {
+             image = ImageIO.read(url);
+        } catch (IOException ex)
+        {
+            System.err.println("ImageMapScroller: Could not load image!");
+            ex.printStackTrace();
+        }
+
+        imageSize = new Dimension(image.getWidth(),image.getHeight());
+
+        if (imageSize.width % grainSize != 0 || imageSize.height % grainSize != 0)
+        {
+            System.err.println("ImageMapScrollerGL: Grain size does not evenly go into image size!! Collision data may be lost!");
+        }
+
+        tileSize = new Dimension(grainSize,grainSize);
+        lineWidth = imageSize.width/grainSize;
+        numLines = imageSize.height/grainSize;
+        //PixelGrabber pGrabber = new PixelGrabber(image,0,0,10,10,true);
+        PixelGrabber pGrabber = null;
+
+        for (int i = 0; i < numLines; i+=grainSize)
+        {
+            for (int j = 0; j < lineWidth; j+=grainSize)
+            {
+                System.out.println("x="+j+" y="+i+"________");
+                pGrabber = new PixelGrabber(image,j*grainSize,i*grainSize,grainSize,grainSize,true);
+                try {
+                    pGrabber.grabPixels();
+                } catch (InterruptedException ex) {}
+
+                System.out.println("Instance of "+pGrabber.getPixels().getClass().toString());
+
+
+                if (pGrabber.getPixels() instanceof byte[])
+                {
+
+                    byte[] pix = (byte[])pGrabber.getPixels();
+                    for (int p = 0; p < pix.length; p++)
+                    {
+                        System.out.println("Byte #"+p+"="+pix[p]);
+                    }
+                }
+                else
+                {
+                    int[] pix = (int[])pGrabber.getPixels();
+                    for (int p = 0; p < pix.length; p++)
+                    {
+                        int pixel = pix[p];
+                        int alpha = (pixel >> 24) & 0xff;
+                        //int red   = (pixel >> 16) & 0xff;
+                        //int green = (pixel >>  8) & 0xff;
+                        //int blue  = (pixel      ) & 0xff;
+
+
+                    }
+                }
+            }
+        }
+        
+    }
+
+    public static void main(String[] args)
+    {
+        ImageMapScrollerGL scroller = new ImageMapScrollerGL("/images/MapScrollerTestImage.png",null,10);
+    }
+}

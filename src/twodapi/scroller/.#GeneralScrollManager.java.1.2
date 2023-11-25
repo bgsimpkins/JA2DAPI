@@ -1,0 +1,351 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.scroller;
+
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import javax.imageio.ImageIO;
+import twodapi.core.Frame2D;
+import twodapi.core.GamePainter;
+import twodapi.core.KeyControls;
+import twodapi.core.Paintable;
+import twodapi.core.Painter;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class GeneralScrollManager implements Paintable
+{
+    private Painter painter;
+
+    private Dimension tileSize = null;
+
+    private char[][] indices;
+
+    private HashMap<Character,BufferedImage> tiles = new HashMap();
+
+    private int numLines = 0;
+
+    private int lineWidth = 0;
+
+    private Rectangle tileBound = new Rectangle();
+
+    private float xScroll = 0f;
+    private float yScroll = 0f;
+
+    private float toScrollX = 0f;
+    private float toScrollY = 0f;
+
+    private boolean scrollingX = false;
+    private boolean scrollingY = false;
+
+    /**If true, scroll will automatically stop if scroll window reaches beginning or end of tiles*/
+    private boolean scrollStopX = false;
+    private boolean scrollStopY = false;
+
+    protected Point start = new Point();
+    protected Point end = new Point();
+
+    private Point returnPoint = new Point();
+
+    public GeneralScrollManager(String inputFile, String[] imagePaths, Painter painter)
+    {
+        this.painter = painter;
+
+
+        initialize(inputFile, imagePaths);
+
+    }
+
+    private void initialize(String file,String[] imagePaths)
+    {
+        if (!file.startsWith("/")) file = "/"+file;
+
+        InputStream input = this.getClass().getResourceAsStream(file);
+
+        BufferedReader bufRead = new BufferedReader(new InputStreamReader(input));
+
+        String line = null;
+        numLines = 0;
+        //Width of widest line
+        lineWidth = 0;
+        ArrayList<String> lineList = new ArrayList();
+        try {
+            //Read first line
+            line = bufRead.readLine();
+
+
+            //read in lines
+            while(line != null)
+            {
+                //lineEmpty(line);
+                if (line.length() > lineWidth) lineWidth = line.length();
+                lineList.add(line);
+
+                line = bufRead.readLine();
+                numLines++;
+            }
+
+            bufRead.close();
+        } catch (IOException ex)
+        {
+            System.err.println("GeneralScrollManager: Could not read input file!! Exiting!");
+            ex.printStackTrace();
+            System.exit(1);
+        }
+
+        //put data in char array for easy processing
+
+        System.out.println("Lines="+numLines+ " Width="+lineWidth);
+
+        indices = new char[numLines][lineWidth];
+
+        for (int i = 0; i < lineList.size(); i++)
+        {
+            line = lineList.get(i);
+
+            for (int j = 0; j < lineWidth; j++)
+            {
+                if (j < line.length())
+                {
+                    indices[i][j] = line.charAt(j);
+                }
+                else{
+                    indices[i][j] = ' ';
+                }
+                System.out.print(indices[i][j]);
+            }
+            System.out.print("|");
+            System.out.println("");
+        }
+
+        //load images & catalogue with char index
+        tiles = new HashMap();
+        for (int i = 0; i < imagePaths.length; i++)
+        {
+            String path = imagePaths[i];
+
+            if (!path.startsWith("/")) path = "/"+path;
+
+            BufferedImage tile = null;
+            try {
+                tile = ImageIO.read(this.getClass().getResource(path));
+            } catch (IOException ex)
+            {
+                System.err.println("GeneralScrollManager: Could not read tile images! Exiting!");
+                ex.printStackTrace();
+                System.exit(1);
+            }
+            int indexPos = path.indexOf("_") + 1;
+            char index = path.charAt(indexPos);
+            tiles.put(index,tile);
+
+            //Assumption is all tiles are same size. Set class var tileSize based on first tile.
+            if (i == 0)
+            {
+                this.tileSize = new Dimension(tile.getWidth(),tile.getHeight());
+                tileBound.setSize(tileSize);
+            }
+
+            System.err.println("Loaded image="+path);
+            System.err.println("Image height="+tile.getHeight());
+        }
+    }
+
+    public void setScroll(float xScroll, float yScroll)
+    {
+        this.xScroll = xScroll;
+        this.yScroll = yScroll;
+    }
+
+    public void scroll(float xAmt, float yAmt)
+    {
+        toScrollX += xAmt;
+        toScrollY += yAmt;
+    }
+
+    public void setScrollStops(boolean xStop, boolean yStop)
+    {
+        scrollStopX = xStop;
+        scrollStopY = yStop;
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void update(float interpolation)
+    {
+        if (toScrollX != 0f)
+        {
+            //System.out.println("To scrollX="+toScrollX);
+
+            if (scrollStopX)
+            {
+                //Keep window from moving out of level area
+                if (xScroll + toScrollX >= 0f && xScroll + toScrollX <= lineWidth*tileSize.width - painter.getSize().width)
+                {
+                    scrollingX = true;
+                    //It is more intuitive to make positive scroll to the right
+                    xScroll += toScrollX;
+
+                }
+                else{
+                    //scrolling = false;
+                }
+            }
+            else
+            {
+                scrollingX = true;
+                //It is more intuitive to make positive scroll to the right
+                xScroll += toScrollX;
+            }
+                      
+            toScrollX = 0;
+        }
+        else
+        {
+            scrollingX = false;
+        }
+
+        if (toScrollY != 0f)
+        {
+            //System.out.println("To scroll="+toScroll);
+
+            if (scrollStopY)
+            {
+                //Keep window from moving out of level area
+                if (yScroll + toScrollY >= 0f && yScroll + toScrollY <= numLines*tileSize.height - painter.getSize().height)
+                {
+                    scrollingY = true;
+                    //It is more intuitive to make positive scroll to the right
+                    yScroll += toScrollY;
+
+                }
+                else{
+                    //scrolling = false;
+                }
+            }
+            else
+            {
+                scrollingY = true;
+                //It is more intuitive to make positive scroll to the right
+                yScroll += toScrollY;
+            }
+
+            toScrollY = 0;
+        }
+        else
+        {
+            scrollingY = false;
+        }
+    }
+
+    public void paintObject(Graphics g) 
+    {
+        Graphics2D g2 = (Graphics2D)g;
+
+        //Only want to paint tiles that are on the screen. Get tile index range for these.
+        start.x = (int)Math.floor(xScroll/tileSize.width);
+        end.x = (int)Math.ceil((xScroll + painter.getSize().width)/tileSize.width);
+
+        start.y = (int)Math.floor(yScroll/tileSize.height);
+        end.y = (int)Math.ceil((yScroll + painter.getSize().height)/tileSize.height);
+
+        if (start.x < 0){ //TODO: Insert code for wrapping!
+            start.x = 0;
+        }
+
+        //Tile set might me smaller than screen size. If so, set xEnd to end of tiles.
+        if (end.x > lineWidth){//TODO: Insert code for wrapping!
+            end.x = lineWidth;
+        }
+
+        if (start.y < 0){ //TODO: Insert code for wrapping!
+            start.y = 0;
+        }
+
+        //Tile set might me smaller than screen size. If so, set xEnd to end of tiles.
+        if (end.y > numLines){//TODO: Insert code for wrapping!
+            end.y = numLines;
+        }
+
+        for (int x = start.x; x < end.x; x++)
+        {
+            for (int y = start.y; y < end.y; y++)
+            {
+                Point pos = indexToPos(x,y);
+
+                BufferedImage tile = tiles.get(indices[y][x]);
+
+                g2.drawImage(tile, pos.x, pos.y, null);
+            }
+        }
+
+        
+    }
+
+    /**Converts an x tile index to x location in the panel
+     *
+     * @param index The tile x index
+     * @return panel x location
+     */
+    public Point indexToPos(int xIndex, int yIndex)
+    {
+        returnPoint.setLocation((int)Math.round(xIndex*tileSize.width - xScroll),
+                (int)Math.round(yIndex*tileSize.height - yScroll));
+
+        return returnPoint;
+    }
+
+    public static void main(String[] args)
+    {
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,1024,768,false);
+
+        GamePainter painter = (GamePainter)frame.getPainter();
+        painter.setFrameRate(30);
+
+        final KeyControls kc = new KeyControls(painter.getComponent());
+        kc.set(KeyEvent.VK_LEFT);
+        kc.set(KeyEvent.VK_RIGHT);
+        kc.set(KeyEvent.VK_UP);
+        kc.set(KeyEvent.VK_DOWN);
+
+        String tileDir = "images/";
+
+        String[] tImages = new String[]{tileDir+"tile_0.gif",tileDir+"tile_1.gif",tileDir+"tile_2.gif"};
+
+        GeneralScrollManager scroller = new GeneralScrollManager("files/testFile.txt",tImages,painter)
+        {
+            @Override
+            public void update(float interpolation)
+            {
+                if (kc.isPressed(KeyEvent.VK_RIGHT)) scroll(10f,0f);
+                else if (kc.isPressed(KeyEvent.VK_LEFT)) scroll(-10f,0f);
+
+                if (kc.isPressed(KeyEvent.VK_UP)) scroll(0,-10f);
+                else if (kc.isPressed(KeyEvent.VK_DOWN)) scroll(0f,10f);
+
+                super.update(interpolation);
+            }
+        };
+
+        scroller.setScrollStops(true, false);
+
+        painter.addToPaintList(scroller);
+        
+    }
+
+}

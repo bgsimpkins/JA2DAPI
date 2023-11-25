@@ -1,0 +1,213 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.scroller;
+
+import java.awt.Graphics;
+import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import twodapi.core.KeyControls;
+import twodapi.core.Paintable;
+import twodapi.core.GamePainter;
+import twodapi.core.Painter;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class ScrollerManager implements Paintable
+{
+    private ScrollerForeground foreground;
+
+    private ArrayList<BackgroundLayer> background = new ArrayList();
+
+    private float parallax;
+
+    //protected JComponent comp;
+    private Painter painter ;
+
+    private float toScroll = 0f;
+
+
+    public ScrollerManager(ScrollerForeground foreground, float parallax, Painter painter)
+    {
+        this.foreground = foreground;
+        this.parallax = parallax;
+        this.painter = painter;
+    }
+
+    /**Adds a layer to the background. When adding layers, start with nearest and go back (even though
+     * rendering of layers will be back to front).
+     * @param file Path to image file for layer.
+     * @param yLoc Y position of layer (0 = top of screen)
+     */
+    public void addLayer(String file, int yLoc)
+    {
+        BackgroundLayer layer = new BackgroundLayer(file,painter);
+        layer.setYLocation(yLoc);
+
+        background.add(layer);
+    }
+
+    /**Adds a layer to the background at a specific level. When adding layers, start with nearest and go back (even though
+     * rendering of layers will be back to front).
+     * @param file Path to image file for layer.
+     * @param yLoc Y position of layer (0 = top of screen)
+     * @param index The level at which to add the layer.
+     */
+    public void addLayer(String file,int index, int yLoc)
+    {
+        BackgroundLayer layer = new BackgroundLayer(file,painter);
+        layer.setYLocation(yLoc);
+
+        background.add(index,layer);
+    }
+
+    public void scroll(float toScroll)
+    {
+        this.toScroll = toScroll;
+    }
+
+    public float getScroll()
+    {
+        return getForeground().getScroll();
+    }
+
+    /**Sets the scroll of the foreground to the specified scroll and then uses the
+     * parallax function to set the scroll of the background layers
+     * @param scroll
+     */
+    public void setScroll(float scroll)
+    {
+        getForeground().setScroll(scroll);
+        getForeground().update(0);
+
+        float prevScroll = scroll;
+
+        for (int i = 0; i < background.size(); i++)
+        {
+            BackgroundLayer layer = background.get(i);
+
+            prevScroll = prevScroll*parallax;
+            layer.setScroll(prevScroll);
+
+            layer.update(0);
+        }
+    }
+
+    public void update(float interpolation)
+    {
+
+        //Update foreground
+        if (getToScroll() != 0) getForeground().scroll(getToScroll());
+        getForeground().update(interpolation);
+
+        if (!foreground.scrolling) return;
+
+        float prevScroll = getToScroll();
+
+        //Update background front to back. Scroll is based on parallax function (scroll=parallax^layer)
+        for (int i = 0; i < background.size(); i++)
+        {
+            BackgroundLayer layer = background.get(i);
+
+            if (getToScroll() != 0)
+            {
+                prevScroll = prevScroll * parallax;
+                layer.scroll(prevScroll);
+                //layer.scroll((float)(p+1)*(toScroll*parallax));
+            }
+            else{
+
+            }
+
+            layer.update(0);
+        }
+        toScroll = 0;
+
+    }
+
+    public void paintObject(Graphics g) 
+    {
+
+        //Paint background back to front
+        for (int i = background.size() - 1; i >= 0; i--)
+        {
+            background.get(i).paintObject(g);
+        }
+
+
+        //Paint foreground
+        getForeground().paintObject(g);
+    }
+
+    public static void main(String[] args)
+    {
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800,380);
+
+        JPanel panel = new JPanel();
+        frame.getContentPane().add(panel);
+
+        final KeyControls control = new KeyControls(panel);
+        control.set(KeyEvent.VK_RIGHT);
+        control.set(KeyEvent.VK_LEFT);
+        GamePainter painter = new GamePainter(panel);
+        
+        String[] paths = {"/images/tile_0.gif","/images/tile_1.gif","/images/tile_2.gif"};
+        ScrollerForeground fore = new ScrollerForeground("/files/testFile.txt",paths,painter);
+
+        ScrollerManager scroller = new ScrollerManager(fore,.3f,painter)
+        {
+            @Override
+            public void update(float interpolation)
+            {
+                if (control.isPressed(KeyEvent.VK_RIGHT))
+                {
+                    this.scroll(10f);
+                }
+                else if (control.isPressed(KeyEvent.VK_LEFT))
+                {
+                    this.scroll(-10f);
+                }
+
+                super.update(0);
+            }
+        };
+
+        
+        painter.addToPaintList(scroller);
+        //painter.setUseVolatileBackbuffer(true);
+
+        System.out.println("Panel height="+panel.getSize().height);
+
+        frame.setVisible(true);
+
+        
+
+        fore.setYLocation(panel.getSize().height - fore.getSize().height);
+        scroller.addLayer("images/trees.gif",20);
+        scroller.addLayer("images/houses.gif", 40);
+        scroller.addLayer("images/mountains.gif",0);
+
+    }
+
+    /**
+     * @return the foreground
+     */
+    public ScrollerForeground getForeground() {
+        return foreground;
+    }
+
+    /**
+     * @return the toScroll
+     */
+    public float getToScroll() {
+        return toScroll;
+    }
+}

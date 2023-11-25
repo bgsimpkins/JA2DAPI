@@ -1,0 +1,362 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import java.awt.Color;
+import java.awt.Font;
+import java.util.ArrayList;
+import java.util.HashMap;
+import org.lwjgl.input.Controller;
+import org.lwjgl.LWJGLException;
+import org.lwjgl.input.Controllers;
+
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class GameController
+{
+    //for quick lookup of button indices
+    private ArrayList<HashMap<String,Integer>> buttonList;
+
+    private HashMap<String,Integer> actionMap;
+
+    private ControllerConfig configScreen;
+
+    private MouseControlsGL mouseControls;
+
+    public GameController()
+    {
+        if (!Controllers.isCreated()) try {
+            Controllers.create();
+
+            initButtonList();
+
+            configScreen = new ControllerConfig();
+
+            /*System.out.println("Number of controllers="+Controllers.getControllerCount());
+            Controller c= getController(0);
+            System.out.println("\n*************Controller="+c.getName());
+            System.out.println("Num axes="+c.getAxisCount());
+            for (int i = 0; i < c.getButtonCount(); i++)
+            {
+                String name = c.getButtonName(i);
+                System.out.println("Button "+i+"="+name);
+            }*/
+
+        } catch (LWJGLException ex)
+        {
+            System.err.println("GameController: Could not create Controllers!");
+            ex.printStackTrace();
+        }
+    }
+
+    private void initButtonList()
+    {
+        buttonList = new ArrayList();
+
+        for (int i = 0; i < Controllers.getControllerCount(); i++)
+        {
+            HashMap<String,Integer> buttonMap = new HashMap();
+            Controller c = Controllers.getController(i);
+            for (int j = 0; j < c.getButtonCount(); j++)
+            {
+                String buttonName = c.getButtonName(j);
+                buttonMap.put(buttonName,j);
+            }
+            buttonList.add(buttonMap);
+        }
+    }
+
+    public void setActions(String[] actions)
+    {
+        configScreen.setActions(actions);
+
+        actionMap = new HashMap();
+        for (int i = 0; i < actions.length; i++)
+        {
+            actionMap.put(actions[i], i);
+
+        }
+    }
+
+    public PaintableGL createConfigScreen(MouseControlsGL mouseControls)
+    {
+        this.mouseControls = mouseControls;
+
+        return configScreen;
+    }
+
+    public boolean isPressed(int controller, String buttonName)
+    {
+        int buttonI = buttonList.get(controller).get(buttonName);
+        return Controllers.getController(controller).isButtonPressed(buttonI);
+    }
+
+    public boolean isPressed(int controller, int buttonIndex)
+    {
+        return Controllers.getController(controller).isButtonPressed(buttonIndex);
+    }
+
+    public int getNumButtons(int controller)
+    {
+        return Controllers.getController(controller).getButtonCount();
+    }
+
+    public String getButtonName(int controller,int buttonIndex)
+    {
+        return Controllers.getController(controller).getButtonName(buttonIndex);
+    }
+
+    public Controller getController(int index)
+    {
+        return Controllers.getController(index);
+    }
+
+    public String getControllerName(int index)
+    {
+        return Controllers.getController(index).getName();
+    }
+
+    public int getNumControllers()
+    {
+        return Controllers.getControllerCount();
+    }
+
+    public int getNumAxes(int controller)
+    {
+        return Controllers.getController(controller).getAxisCount();
+    }
+
+    public static void main(String[] args)
+    {
+        /*GameController gc = new GameController();
+        Controller c= gc.getController(0);
+        System.out.println("\n*************Controller="+c.getName());
+        System.out.println("Num axes="+c.getAxisCount());
+        for (int i = 0; i < c.getButtonCount(); i++)
+        {
+            String name = c.getButtonName(i);
+            System.out.println("Button "+i+"="+name);
+        }*/
+
+        //Test controller monitor
+        /*GLPainter painter = new GLPainter(800,600)
+        {
+            GameController gc;
+            ControllerMonitor monitor;
+            
+            public void gameInit()
+            {
+                gc = new GameController();
+                monitor= new ControllerMonitor(this,gc);
+            }
+            public void gameUpdate(float interp)
+            {
+                monitor.update();
+            }
+        };*/
+
+        //Test ControllerConfig
+        GLPainter painter = new GLPainter(800,600)
+        {
+            public void gameInit()
+            {
+                GameController gc = new GameController();
+                gc.setActions(new String[]{"Run right","Run left","Jump","Flames out ass","Duck like a wuss"});
+                PaintableGL cs = gc.createConfigScreen(new MouseControlsGL());
+                addToPaintList(cs);
+            }
+        };
+
+    }
+    class ControllerConfig implements PaintableGL
+    {
+        private int controllerI;
+        private TextGL[] actionTexts;
+        private TextGL[] actionVals;
+
+        public ControllerConfig()
+        {
+            controllerI = 0;
+        }
+
+        public void setActions(String[] actions)
+        {
+            actionTexts = new TextGL[actions.length];
+            actionVals = new TextGL[actions.length];
+            Font font = new Font("sanserif",Font.PLAIN,18);
+
+            int y = 40;
+
+            int width = 0;
+
+            for (int i = 0; i < actions.length; i++)
+            {
+                String text = actions[i];
+                if (text.length() > 20) text = text.substring(0, 20);
+
+                TextGL action = new TextGL(text,font,Color.LIGHT_GRAY);
+                if (action.getSize().width > width) width = action.getSize().width;
+                actionTexts[i] = action;
+                action.setLocation(20, y);
+                y+= 30;
+            }
+
+            y = 40;
+
+            for (int i = 0; i < actions.length; i++)
+            {
+                TextGL val = new TextGL("    ",font,Color.WHITE);
+                val.setDrawBounds(true);
+                actionVals[i] = val;
+                val.setLocation(40+width,y);
+                y+=30;
+            }
+
+        }
+
+        public void draw(float interpolation)
+        {
+            for (int i = 0; i < actionTexts.length; i++)
+            {
+                actionTexts[i].draw(interpolation);
+            }
+
+            for (int i = 0; i < actionVals.length; i++)
+            {
+                actionVals[i].draw(interpolation);
+            }
+
+            if (mouseControls.buttonPressed(MouseControlsGL.LEFT_BUTTON))
+            {
+                //TODO: Activate button config mode
+            }
+        }
+
+    }
+
+}
+
+
+class ControllerMonitor
+{
+    private GLPainter painter;
+    private GameController gc;
+    private TextGL[] buttonStates, axesStates;
+    private int controllerI;
+
+    public ControllerMonitor(GLPainter painter, GameController gc)
+    {
+        this.painter = painter;
+        this.gc = gc;
+        controllerI = 0;
+        initDisplay();
+    }
+
+    private void initDisplay()
+    {
+
+        if (gc.getNumControllers() <= controllerI)
+        {
+            addLabel("Controller Not Available!",new Font("sanserif",Font.PLAIN,18),10,20,Color.RED);
+
+            return;
+        }
+
+        int y = 40;
+        addLabel("Controller "+controllerI,new Font("sanserif",Font.PLAIN,18),10,y,Color.BLUE);
+        y=80;
+
+        //Buttons
+        Font font = new Font("sanserif",Font.PLAIN,14);     
+        addLabel("Buttons:",font,10,y,Color.BLUE);
+        y=120;
+
+        for (int i = 0; i < gc.getNumButtons(controllerI); i++)
+        {
+            String buttonName = gc.getButtonName(controllerI, i);
+            addLabel(buttonName,font,10,y,Color.LIGHT_GRAY);
+            y+=20;
+        }
+
+        y=120;
+
+        buttonStates = new TextGL[gc.getNumButtons(controllerI)];
+
+        for (int i = 0; i < gc.getNumButtons(controllerI); i++)
+        {
+            TextGL label = addLabel("false",font,120,y,Color.WHITE);
+            buttonStates[i] = label;
+            y+=20;
+        }
+        
+        //Axes
+        y=80;
+        addLabel("Axes:",font,240,y,Color.BLUE);
+        
+        y=120;
+        addLabel("X Axis",font,240,y,Color.LIGHT_GRAY);
+        addLabel("Y Axis",font,240,y+=20,Color.LIGHT_GRAY);
+        addLabel("Z Axis",font,240,y+=20,Color.LIGHT_GRAY);
+        addLabel("RX Axis",font,240,y+=20,Color.LIGHT_GRAY);
+        addLabel("RY Axis",font,240,y+=20,Color.LIGHT_GRAY);
+        addLabel("RZ Axis",font,240,y+=20,Color.LIGHT_GRAY);
+
+        y=120;
+
+        axesStates = new TextGL[6];
+        for (int i = 0; i < 6; i++)
+        {
+            TextGL label = addLabel("0",font,350,y,Color.WHITE);
+            axesStates[i] = label;
+            y+=20;
+        }
+    }
+
+    private TextGL addLabel(String name, Font font, int x, int y, Color color)
+    {
+        TextGL label = new TextGL(name,font,color);
+        label.setLocation(x, y);
+        painter.addToPaintList(label,1);
+        return label;
+    }
+
+    public void update()
+    {
+        if (gc.getNumControllers() <= controllerI) return;
+
+        for (int i = 0; i < gc.getNumButtons(controllerI); i++)
+        {
+            boolean pressed = Controllers.getController(controllerI).isButtonPressed(i);
+            String pressedText =  (pressed)?"true":"false";
+            TextGL state = buttonStates[i];
+            if (!state.getText().equals(pressedText)) state.setText(pressedText );
+        }
+
+        Controller controller = Controllers.getController(controllerI);
+
+        String val = "" + controller.getXAxisValue();
+        setTextIfChanged(axesStates[0],val);
+        val = "" + controller.getYAxisValue();
+        setTextIfChanged(axesStates[1],val);
+        val = "" + controller.getZAxisValue();
+        setTextIfChanged(axesStates[2],val);
+        val = "" + controller.getRXAxisValue();
+        setTextIfChanged(axesStates[3],val);
+        val = "" + controller.getRYAxisValue();
+        setTextIfChanged(axesStates[4],val);
+        val = "" + controller.getRZAxisValue();
+        setTextIfChanged(axesStates[5],val);
+
+    }
+
+    private void setTextIfChanged(TextGL textGL, String text)
+    {
+        if (!textGL.getText().equals(text)) textGL.setText(text);
+    }
+}

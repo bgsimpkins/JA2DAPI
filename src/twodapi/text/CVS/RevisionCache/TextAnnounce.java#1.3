@@ -1,0 +1,133 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.text;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Point;
+import twodapi.core.Frame2D;
+import twodapi.core.GamePainter;
+import twodapi.core.Sprite2D;
+
+/**A single-line text display that is set to occur for a definite amount of time. This is good for short notifications to the
+ * player such as a 'level up', for example.
+ *
+ * @author bsimpkins
+ */
+public class TextAnnounce extends Text
+{
+    private float announceTime = 2f;
+
+    private float timer;
+
+    private boolean visible = false;
+
+    /**Creates a new instance of text announce with default values*/
+    public TextAnnounce()
+    {
+        super();
+    }
+
+    /**Creates a new instance of text announce with the specified font and
+     * default values for other parameters
+     *
+     * @param font Font
+     */
+    public TextAnnounce(Font font)
+    {
+        super(font);
+    }
+
+    /**Creates a new instance of text announce with the specified text, font, color,
+     * and location
+     *
+     * @param text Text to be rendered
+     * @param font Font
+     * @param color Color of text
+     * @param location Center location of text
+     */
+    public TextAnnounce(String text, Font font, Color color, Point location)
+    {
+        super(text,font,color,location);
+    }
+
+    /**Sets time to display announcement
+     *
+     * @param time Time (in seconds) to display announcement
+     */
+    public void setAnnounceTime(float time)
+    {
+        this.announceTime = time;
+    }
+
+    /**Gets time to display announcement
+     *
+     * @return Time (in seconds) to display announcement
+     */
+    public float getAnnounceTime()
+    {
+        return announceTime;
+    }
+
+    /**Shows the announcement for the amount of time specified in <code>setAnnounceTime()</code>
+     * 
+     */
+    public void showAnnounce()
+    {
+        timer = 0;
+        visible = true;
+    }
+
+    @Override
+    public void update(float interpolation)
+    {
+        if (visible)
+        {
+            timer += interpolation;
+
+            if (timer > announceTime) visible = false;
+        }
+
+        super.update(interpolation);
+    }
+
+    @Override
+    public void paintObject(Graphics g)
+    {
+        if (visible) super.paintObject(g);
+    }
+
+    public static void main(String[] args)
+    {
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,1024,768,false);
+
+        GamePainter painter = (GamePainter)frame.getPainter();
+
+        Dimension size = painter.getSize();
+
+        Sprite2D a = new Sprite2D("/images/Asteroid.gif"){
+            @Override
+            public void updateState(float interpolation)
+            {
+                move(3*Math.PI/4,2);
+            }
+        };
+
+        painter.addToPaintList(a);
+
+        TextAnnounce announce = new TextAnnounce();
+        announce.setText("Announcement!");
+        announce.setFont(new Font("sanserif",Font.BOLD,50));
+        announce.setAnnounceTime(5);
+        announce.showAnnounce();
+        announce.setLocation(size.width/2,size.height/2);
+
+        painter.addToPaintList(announce,1);
+    }
+
+}

@@ -1,0 +1,176 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.audio;
+
+import java.applet.Applet;
+import java.applet.AudioClip;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**A very simple audio player that can play, loop, and stop/interrupt playing of a sound. This
+ * uses multithreading, so mutliple sounds can be played at once. Volume, balance, and other
+ * parameters cannot be changed with this audio player.
+ *
+ * NOTE: This sound player seems to work efficiently on Windows platform, however, because a new
+ * stream is created each time a sound is played in Linux, performance is not as good (but, this
+ * has only been tested in Ubuntu). This hasn't been tested on a Mac yet.
+ *
+ * @author bsimpkins
+ */
+public class SimpleAudioPlayer extends Thread
+{
+    private HashMap<String,AudioClip> sounds = new HashMap();
+
+    private ArrayList<String> playQueue = new ArrayList();
+
+    /**Creates a new instance of SimpeAudioPlayer. Loads the array of soundfiles and adds
+     * to playlist.
+     *
+     * @param filenames The names of the sound files to be added. If this is null, none are added.
+     */
+    public SimpleAudioPlayer(String[] filenames)
+    {
+        if (filenames != null)
+        {
+            for (int i = 0; i < filenames.length;i++)
+            {
+                addSound(filenames[i]);
+            }
+        }
+        start();
+    }
+
+    /**Adds a sound file to the playlist.
+     *
+     * @param filename Sound file to be added to the playlist.
+     */
+    public void addSound(String filename)
+    {
+        if (!filename.startsWith("/")) filename = "/"+filename;
+
+        try
+        {
+            AudioClip sound = Applet.newAudioClip(this.getClass().getResource(filename));
+            sounds.put(filename, sound);
+        }catch(Exception e)
+        {
+            System.err.println("SimpleAudioPlayer: Trouble loading sound "+filename+"- "+e);
+        }
+    }
+
+    /**Removes a sound from the playlist.
+     *
+     * @param filename Sound to be removed from the playlist.
+     */
+    public void removeSound(String filename)
+    {
+        if (!sounds.containsKey(filename))
+        {
+            System.err.println("SimpleAudioPlayer: Could not remove sound "+filename+". Not in sound list.");
+        }
+        else
+        {
+            sounds.remove(filename);
+        }
+    }
+
+    /**Plays a sound on the playlist. The sound must have been previously added to playlist with <code>addSound()</code>.
+     *
+     * @param filename File name of sound to be played.
+     */
+    public void playSound(String filename)
+    {
+        if (!filename.startsWith("/")) filename = "/"+filename;
+
+        if (!sounds.containsKey(filename))
+        {
+            System.err.println("SimpleAudioPlayer: Could not play sound "+filename+". Not in sound list.");
+        }
+        else
+        {
+            playQueue.add(filename);
+        }
+    }
+
+    /**Plays a sound on the playlist repeatedly until <code>stopSound()</code> is called.
+     * The sound must have been previously added to playlist with <code>addSound()</code>.
+     *
+     * @param filename The filename of the sound to loop.
+     */
+    public void loopSound(String filename)
+    {
+        if (!filename.startsWith("/")) filename = "/"+filename;
+
+        if (!sounds.containsKey(filename))
+        {
+            System.err.println("SimpleAudioPlayer: Could not loop sound "+filename+". Not in sound list.");
+        }
+        else
+        {
+            sounds.get(filename).loop();
+        }
+    }
+
+    /**Stops a sound from playing that was started with <code>playSound()</code> or <code>loopSound()</code>.
+     * The sound must have been previously added to playlist with <code>addSound()</code>.
+     *
+     * @param filename The filename of the sound to stop.
+     */
+    public void stopSound(String filename)
+    {
+        if (!filename.startsWith("/")) filename = "/"+filename;
+
+        if (!sounds.containsKey(filename))
+        {
+            System.err.println("SimpleAudioPlayer: Could not stop playing sound "+filename+". Not in sound list.");
+        }
+        else
+        {
+            sounds.get(filename).stop();
+        }
+    }
+
+    /**Returns the filenames of the sounds currently in the playlist.
+     *
+     * @return An <code>ArrayList</code> of the sound filenames in the playlist.
+     */
+    public ArrayList getSoundList()
+    {
+        Iterator iter = sounds.entrySet().iterator();
+
+        ArrayList<String> soundList = new ArrayList();
+
+        while (iter.hasNext())
+        {
+            Map.Entry me = (Map.Entry)iter.next();
+            soundList.add((String)me.getKey());
+        }
+
+        return soundList;
+    }
+
+    public void run()
+    {
+        while(true)
+        {
+            if (!playQueue.isEmpty())
+            {
+                for (int i = 0; i < playQueue.size(); i++)
+                {
+                    sounds.get(playQueue.get(i)).play();
+                }
+                playQueue.clear();
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ex) {}
+        }
+    }
+}

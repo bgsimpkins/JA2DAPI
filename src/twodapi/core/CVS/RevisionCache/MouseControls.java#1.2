@@ -1,0 +1,699 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
+import java.util.ArrayList;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+
+/**This class manages objects that wish to get mouse updates via the {@link Mouseable} interface. By default,
+ * it uses it's own internal {@link Thread} (which is still being tested for efficiency) for firing events. This seems to
+ * be a more optimal approach than dispatching event updates to the AWT thread (which is also relied upon for rendering if
+ * Swing is being used). NOTE: The timing of the internal thread is still crude and its optimality has not been tested/benchmarked
+ * against dispathing on the AWT thread.
+ *
+ * Users wishing to fire events on the AWT thread can set <code>setUseAWTThread()</code> to true to follow the
+ * traditional framework.
+ *
+ *
+ * @author bsimpkins
+ */
+public class MouseControls implements Runnable, Paintable
+{
+    private Painter painter;
+
+    private ArrayList<Mouseable> mouseables = new ArrayList();
+    private ArrayList<Boolean> mouseablesEntered = new ArrayList();
+
+    private Thread thread;
+
+    private boolean awtThread = false;
+
+    private final int UNUSED = 0;
+    private final int MOUSE_BUTTON = 1;
+    private final int MOUSE_MOVE = 2;
+    private final int MOUSE_BORDER = 3;
+
+    private ArrayList<MouseUpdate> updateQueue;
+
+    private Rectangle boundsChecker = new Rectangle();
+
+    private ArrayList<Point> traceQueue = null;
+
+    private int traceIndex = 0;
+
+    private Point scaledPos = new Point();
+
+    /**Creates an new instance of <code>MouseControls</code>.
+     *
+     * @param comp Component where everything is being rendered
+     */
+    public MouseControls(Painter painter)
+    {
+        this.painter = painter;
+        JComponent comp = painter.getComponent();
+        MyMouseListener listener = new MyMouseListener(comp);
+
+        initUpdateQueue();
+
+        thread = new Thread(this);
+        thread.start();
+
+    }
+
+    private void initUpdateQueue()
+    {
+        updateQueue = new ArrayList();
+
+        //Start with an update queue size of 10
+        for (int i = 0; i < 10; i++)
+        {
+            MouseUpdate update = new MouseUpdate();
+            updateQueue.add(update);
+        }
+    }
+
+    private void addToQueue(int updateType, Point mouseLocation, int button, boolean pressed, boolean entered, int index)
+    {
+        MouseUpdate toAdd = null;
+        
+        //Go thru queue, looking for an unused MouseUpdate
+        for (int i = 0; i < updateQueue.size(); i++)
+        {
+            MouseUpdate update = updateQueue.get(i);
+            
+            //found one
+            if (update.getUpdateType() == UNUSED)
+            {
+                toAdd = update;
+                break;
+            }
+        }
+        
+        if (toAdd == null)  //No unused MouseUpdate was found
+        {
+            //create another and add to queue
+
+
+            toAdd = new MouseUpdate();
+            updateQueue.add(toAdd);
+
+            System.out.println("Increased size of MouseUpdate queue to "+updateQueue.size());
+
+            //TODO: Need queue management to be optimal. After a while, repeated lack of use of a certain number of MouseUpdates
+            //in the queue should cause the queue to shrink
+  
+        }
+
+        toAdd.setButton(button);
+        toAdd.setMouseLocation(getScaledPosition(mouseLocation));
+        toAdd.setPressed(pressed);
+        toAdd.setUpdateType(updateType);
+        toAdd.setIndex(index);
+        toAdd.setEntered(entered);
+
+    }
+
+    private void addToTraceQueue(Point point)
+    {
+        if (++traceIndex >= traceQueue.size()) traceIndex = 0;
+
+        traceQueue.get(traceIndex).setLocation(getScaledPosition(point));
+    }
+
+    /**Adds a <code>Mouseable</code> object to receive updates
+     *
+     * @param mouseable Mouseable object
+     */
+    public void addMouseable(Mouseable mouseable)
+    {
+
+        if (mouseable != null) {
+            
+            mouseables.add(mouseable);
+            mouseablesEntered.add(new Boolean(false));
+        }
+    }
+
+    /**Removes the specified <code>Mouseable</code> object from the update list.
+     *
+     * @param mouseable Mouseable object
+     */
+    public boolean removeMouseable(Mouseable mouseable)
+    {
+        mouseablesEntered.remove(mouseables.indexOf(mouseable));
+
+        return mouseables.remove(mouseable);
+    }
+
+    /**Removes all <code>Mouseable</code> objects in the update list.*/
+    public void removeAllMouseables()
+    {
+        mouseables.clear();
+    }
+
+    /**Returns true if the specified <code>Mouseable</code> is currently moused over
+     *
+     * @param mouseable A Mouseable object (must have been registered with <code>addMouseable()</code>!
+     * @return True if moused over.
+     */
+    public boolean isMouseOver(Mouseable mouseable)
+    {
+        int index = mouseables.indexOf(mouseable);
+
+        if (index == -1)
+        {
+            System.err.println(this.getClass().getName()+": isMouseOver() called on Mouseable that has not been added with addMouseable()");
+            return false;
+        }
+
+        return mouseablesEntered.get(index);
+    }
+
+    /**If set to true, draws a trace path behind the mouse. This is useful to see the frequency of mouse move/drag updates
+     *
+     * @param draw True to draw a trace path.
+     */
+    public void setDrawTrace(boolean draw)
+    {
+        if (draw)
+        {
+            traceQueue = new ArrayList();
+            for (int i = 0; i < 10;i++)
+            {
+                traceQueue.add(new Point());
+            }
+        }
+        else {
+            traceQueue = null;
+        }
+    }
+
+    /**If set to true, draws a trace path behind the mouse. This is useful to see the frequency of mouse move/drag updates
+     *
+     * @param painter The {@link GamePainter} object
+     * @param tracelength The number of pixels to paint in the tracepath
+     */
+    public void setDrawTrace(GamePainter painter, int traceLength)
+    {
+        //Add to highest layer in Painter
+        painter.addToPaintList(this, painter.getNumLayers()-1);
+
+        traceQueue = new ArrayList();
+        for (int i = 0; i < traceLength;i++)
+        {
+            traceQueue.add(new Point());
+        }
+
+    }
+
+    /**The internal thread. Do not override or call!*/
+    public void run()
+    {
+        while (!awtThread)
+        {
+            //System.out.println("Interal thread update!");
+            updateMouseEvents();
+            try
+            {
+                Thread.sleep(20);
+            } catch (InterruptedException ex) {}
+        }
+    }
+
+    private void updateMouseEvents()
+    {
+        for (int i = 0; i < updateQueue.size(); i++)
+        {
+            MouseUpdate update = updateQueue.get(i);
+
+            if (update.getUpdateType() > UNUSED)
+            {
+                broadcastUpdate(update);
+
+                update.setUpdateType(UNUSED);
+            }
+        }
+
+    }
+
+    private void broadcastUpdate(MouseUpdate update)
+    {
+
+        if (update.getUpdateType() == MOUSE_BORDER)
+        {
+            for (int i = 0; i < mouseables.size(); i++)
+            {
+                Mouseable mouseable = mouseables.get(i);
+
+                if (isOnscreen(mouseable) && update.getIndex() == i)
+                {
+                    mouseable.mouseBorderUpdate(update.getMouseLocation(), update.isEntered());
+                    break;
+                }
+            }
+        }
+
+        else if (update.getUpdateType() == MOUSE_MOVE)
+        {
+            for (int i = 0; i < mouseables.size(); i++)
+            {
+                Mouseable mouseable = mouseables.get(i);
+
+                if (isOnscreen(mouseable))
+                {
+                    mouseable.mouseMoveUpdate(update.getMouseLocation(), update.getButton(), update.isPressed());
+                }
+            }
+        }
+
+        else if (update.getUpdateType() == MOUSE_BUTTON)
+        {
+            for (int i = 0; i < mouseables.size(); i++)
+            {
+                Mouseable mouseable = mouseables.get(i);
+
+                if (isOnscreen(mouseable))
+                {
+                    mouseable.mouseButtonUpdate(update.getMouseLocation(), update.getButton(), update.isPressed());
+                }
+            }
+        }
+
+
+    }
+
+    private boolean isOnscreen(Mouseable mouseable)
+    {
+        Point location = mouseable.getLocation();
+        Dimension size = mouseable.getSize();
+
+        if ((location.x - size.width/2 + size.width < 0) ||
+                (location.x-size.width/2 > painter.getSize().width) ||
+                (location.y-size.height/2 + size.height < 0) ||
+                (location.y-size.height/2 > painter.getSize().height))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+
+    /**Returns true if AWT Thread is being used.
+     * @return true if using AWT Thread (false if using internal thread)
+     */
+    public boolean usingAwtThread()
+    {
+        return awtThread;
+    }
+
+    /**Set to true to use AWT Thread
+     * @param awtThread true if using AWT Thread (false if using internal thread)
+     */
+    public void setUseAWTThread(boolean awtThread)
+    {
+        if (this.awtThread == true && awtThread == false)
+        {
+            thread = new Thread(this);
+            thread.start();
+        }
+        else if (this.awtThread == false && awtThread == true)
+        {
+            System.out.println(this.getClass().toString()+": Nullifying internal thread");
+            thread = null;
+        }
+
+        this.awtThread = awtThread;
+    }
+
+    public Point getScaledPosition(Point pointIn)
+    {
+        double xScaled = pointIn.getX()/painter.getDisplayScaleX();
+        double yScaled = pointIn.getY()/painter.getDisplayScaleY();
+
+        scaledPos.setLocation(xScaled, yScaled);
+
+        return scaledPos;
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void paintObject(Graphics g) 
+    {
+        Color prevColor = g.getColor();
+        g.setColor(Color.BLUE);
+
+        if (traceQueue != null)
+        {
+            for (int i = 0; i < traceQueue.size(); i++)
+            {
+                Point point = traceQueue.get(i);
+                g.drawLine(point.x,point.y,point.x,point.y);
+            }
+        }
+
+        g.setColor(prevColor);
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void update(float interpolation) {}
+
+    class MyMouseListener implements MouseListener, MouseMotionListener
+    {
+        public MyMouseListener(JComponent comp)
+        {
+            comp.addMouseListener(this);
+            comp.addMouseMotionListener(this);
+        }
+
+        public void mouseClicked(MouseEvent e) {}
+
+        public void mousePressed(MouseEvent e) 
+        {
+            addToQueue(MOUSE_BUTTON,e.getPoint(),mouseEventButtonToButton(e.getButton()),true,false,-1);
+
+            if (usingAwtThread())
+            {
+                updateMouseEvents();
+            }  
+
+        }
+
+        public void mouseReleased(MouseEvent e) 
+        {
+            addToQueue(MOUSE_BUTTON,e.getPoint(),mouseEventButtonToButton(e.getButton()),false,false,-1);
+
+            if (usingAwtThread())
+            {
+                updateMouseEvents();
+            }
+        }
+
+        public void mouseEntered(MouseEvent e) {}
+
+        public void mouseExited(MouseEvent e) {}
+
+        public void mouseDragged(MouseEvent e) 
+        {
+            addToQueue(MOUSE_MOVE,e.getPoint(),mouseEventButtonToButton(e.getButton()),true,false,-1);
+
+            for (int i = 0; i < mouseables.size(); i++)
+            {
+                Mouseable mouseable = mouseables.get(i);
+
+                if (!isOnscreen(mouseable)) continue;
+
+                boundsChecker.setBounds(mouseable.getLocation().x-mouseable.getSize().width/2, mouseable.getLocation().y-mouseable.getSize().height/2, mouseable.getSize().width, mouseable.getSize().height);
+                
+                Point scaledPosition = getScaledPosition(e.getPoint());
+                
+                boolean entered = boundsChecker.contains(scaledPosition);
+                Boolean currentlyEntered = mouseablesEntered.get(i);
+
+                if (entered && !currentlyEntered)
+                {
+                    mouseablesEntered.set(i, entered); 
+                   //currentlyEntered = true;
+                   addToQueue(MOUSE_BORDER,e.getPoint(),mouseEventButtonToButton(e.getButton()),true,true,i);
+                }
+                else if (!entered && currentlyEntered)
+                {
+                    mouseablesEntered.set(i, entered);
+                    //currentlyEntered = false;
+                    addToQueue(MOUSE_BORDER,e.getPoint(),mouseEventButtonToButton(e.getButton()),true,false,i);
+                }
+            }
+            
+            if (usingAwtThread())
+            {
+                updateMouseEvents();
+            }
+            if (traceQueue != null) addToTraceQueue(e.getPoint());
+
+        }
+
+
+        public void mouseMoved(MouseEvent e) 
+        {
+            addToQueue(MOUSE_MOVE,e.getPoint(),mouseEventButtonToButton(e.getButton()),false,false,-1);
+
+            for (int i = 0; i < mouseables.size(); i++)
+            {
+                Mouseable mouseable = mouseables.get(i);
+
+                if (!isOnscreen(mouseable)) continue;
+
+                boundsChecker.setBounds(mouseable.getLocation().x - mouseable.getSize().width/2, mouseable.getLocation().y-mouseable.getSize().height/2, mouseable.getSize().width, mouseable.getSize().height);
+                
+                Point scaledPosition = getScaledPosition(e.getPoint());
+                
+                boolean entered = boundsChecker.contains(scaledPosition);
+                Boolean currentlyEntered = mouseablesEntered.get(i);
+
+                if (entered && !currentlyEntered)
+                {
+                   mouseablesEntered.set(i, entered);
+                   //currentlyEntered = true;
+                   addToQueue(MOUSE_BORDER,e.getPoint(),mouseEventButtonToButton(e.getButton()),false,true,i);
+                }
+                else if (!entered && currentlyEntered)
+                {
+                    mouseablesEntered.set(i, entered);
+                    //currentlyEntered = false;
+                    addToQueue(MOUSE_BORDER,e.getPoint(),mouseEventButtonToButton(e.getButton()),false,false,i);
+                }
+            }
+
+
+            if (usingAwtThread())
+            {
+                updateMouseEvents();
+            }
+            if (traceQueue != null) addToTraceQueue(e.getPoint());
+        }
+
+        public int mouseEventButtonToButton(int mouseEventButton)
+        {
+            if (mouseEventButton == MouseEvent.BUTTON1) return Mouseable.LEFT_BUTTON;
+            else if (mouseEventButton == MouseEvent.BUTTON2) return Mouseable.CENTER_BUTTON;
+            else if (mouseEventButton == MouseEvent.BUTTON3) return Mouseable.RIGHT_BUTTON;
+            else return Mouseable.NO_BUTTON;
+        }
+    }
+
+    /**Encapsulates mouse update data*/
+    class MouseUpdate
+    {
+        private int updateType = 0;
+        private Point mouseLocation = null;
+        private int button = 0;
+        private boolean pressed = false;
+        private boolean entered = false;
+        private int index = -1;
+
+
+        public MouseUpdate(){}
+       
+
+        /**
+         * @return the updateType
+         */
+        public int getUpdateType() {
+            return updateType;
+        }
+
+        /**
+         * @param updateType the updateType to set
+         */
+        public void setUpdateType(int updateType) {
+            this.updateType = updateType;
+        }
+
+        /**
+         * @return the mouseLocation
+         */
+        public Point getMouseLocation() {
+            return mouseLocation;
+        }
+
+        /**
+         * @param mouseLocation the mouseLocation to set
+         */
+        public void setMouseLocation(Point mouseLocation) {
+            this.mouseLocation = mouseLocation;
+        }
+
+        /**
+         * @return the button
+         */
+        public int getButton() {
+            return button;
+        }
+
+        /**
+         * @param button the button to set
+         */
+        public void setButton(int button) {
+            this.button = button;
+        }
+
+        /**
+         * @return the pressed
+         */
+        public boolean isPressed() {
+            return pressed;
+        }
+
+        /**
+         * @param pressed the pressed to set
+         */
+        public void setPressed(boolean pressed) {
+            this.pressed = pressed;
+        }
+
+        /**
+         * @return the entered
+         */
+        public boolean isEntered() {
+            return entered;
+        }
+
+        /**
+         * @param entered the entered to set
+         */
+        public void setEntered(boolean entered) {
+            this.entered = entered;
+        }
+
+        /**
+         * @return the index
+         */
+        public int getIndex() {
+            return index;
+        }
+
+        /**
+         * @param index the index to set
+         */
+        public void setIndex(int index) {
+            this.index = index;
+        }
+    }
+
+    public static void main(String[] args)
+    {
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,800,600,true);
+
+        GamePainter painter = (GamePainter)frame.getPainter();
+
+        final MouseControls controls = new MouseControls(painter);
+
+        final Mouseable mouseable = new Mouseable()
+        {
+            public Point getLocation(){
+                return new Point (200,200);
+            }
+            public Dimension getSize()
+            {
+                return new Dimension (200,200);
+            }
+            public void mouseButtonUpdate(Point mousePoint, int button, boolean pressed)
+            {
+                //System.out.println("Button pressed "+pressed);
+            }
+
+            public void mouseMoveUpdate(Point mousePoint, int button, boolean pressed)
+            {
+                //if (pressed)
+                //    System.out.println("Mouse dragged");
+                //else System.out.println("Mouse moved");
+            }
+
+            public void mouseBorderUpdate(Point mousePoint, boolean entered)
+            {
+                if (entered)
+                    System.out.println("Entered Box 1!");
+                else System.out.println("Exited Box 1!");
+            }
+        };
+
+        Mouseable mouseable2 = new Mouseable()
+        {
+            public Point getLocation(){
+                return new Point (600,200);
+            }
+            public Dimension getSize()
+            {
+                return new Dimension (100,100);
+            }
+            public void mouseButtonUpdate(Point mousePoint, int button, boolean pressed)
+            {
+                //System.out.println("Button pressed "+pressed);
+            }
+
+            public void mouseMoveUpdate(Point mousePoint, int button, boolean pressed)
+            {
+                //if (pressed)
+                //    System.out.println("Mouse dragged");
+                //else System.out.println("Mouse moved");
+            }
+
+            public void mouseBorderUpdate(Point mousePoint, boolean entered)
+            {
+                if (entered)
+                    System.out.println("Entered Box 2!");
+                else System.out.println("Exited Box 2!");
+            }
+        };
+        
+        Paintable box = new Paintable()
+        {
+
+            public void paintObject(Graphics g) {
+                g.setColor(Color.BLACK);
+                g.drawRect(100, 100, 200, 200);
+            }
+
+            public void update(float interpolation) 
+            {
+                if (controls.isMouseOver(mouseable))
+                {
+                    System.out.println("Over box 1!");
+                }
+            }
+
+        };
+        
+        Paintable box2 = new Paintable()
+        {
+            public void paintObject(Graphics g) {
+                g.setColor(Color.BLACK);
+                g.drawRect(550, 150, 100, 100);
+            }
+
+            public void update(float interpolation) { }
+        };
+
+        painter.addToPaintList(box);
+        painter.addToPaintList(box2);
+        
+        //controls.setUseAWTThread(true);
+        controls.addMouseable(mouseable);
+        controls.addMouseable(mouseable2);
+        controls.setDrawTrace(painter, 50);
+
+    }
+
+}

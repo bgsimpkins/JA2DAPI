@@ -1,0 +1,569 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.awt.BufferCapabilities;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+import java.awt.Image;
+import java.awt.ImageCapabilities;
+import java.awt.Toolkit;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import javax.imageio.ImageIO;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import twodapi.text.Text;
+
+/**An event driven renderer. Unlike the {@link GamePainter}, this {@link Painter} updates based on specified events
+ * (e.g, mouse presses) or on manual update calls. This painter is appropriate when it is more efficient to link
+ * updateState/paint calls to events rather than regular frame updates. It seems to be better for a user-interface driven
+ * design approach, for example, rather than an animation/game approach.
+ *
+ * By default, this <coded>Painter</code> uses the Swing framework (so you can add Swing components to this Painter as well), but also supports
+ * active rendering (more efficient and preferred if you are not using Swing components).
+ *
+ * @author bsimpkins
+ */
+public class EventDrivenPainter extends JComponent implements Painter
+{
+    private Color background = Color.LIGHT_GRAY;
+
+    //private JComponent comp;
+
+    private boolean activeRendering = false;
+
+    private ArrayList<ArrayList<Paintable>> layerList = new ArrayList();
+
+    private int numLayers;
+
+    private Graphics2D g2;
+
+    private Image dbImage = null;
+
+    private long lastUpdate = 0;
+
+    private float interpolation = 0f;
+
+    private ArrayList<Integer> eventList = new ArrayList();
+
+    public static final int MOUSEMOVE = 1;
+
+    public static final int MOUSEDRAG = 2;
+
+    public static final int MOUSEPRESS = 3;
+
+    public static final int MOUSERELEASE = 4;
+
+    double displayScaleX = 1;
+    double displayScaleY = 1;
+
+    private Dimension returnSize = null;
+
+    /**Creates a new instance of EventDrivenPainter with 5 layers and Swing mode*/
+    public EventDrivenPainter()
+    {
+
+        reportCapabilities();
+        initLayers(5);
+
+        System.out.println("EventDrivenPainter: Using Swing paint framework");
+
+        EventMouseListener mouseListener = new EventMouseListener();
+
+        addMouseListener(mouseListener);
+        addMouseMotionListener(mouseListener);
+    }
+
+    /**Creates a new instance of EventDrivenPainter with the specified number of layers
+     * and in Swing mode or active rendering mode.
+     *
+     * @param numLayers Number of render layers
+     * @param activeRendering true if active rendering is used (false=Swing paint framework)
+     */
+    public EventDrivenPainter(int numLayers, boolean activeRendering)
+    {
+        this.activeRendering = activeRendering;
+        this.numLayers = numLayers;
+
+        reportCapabilities();
+        initLayers(numLayers);
+
+        if (!activeRendering)
+        {
+            System.out.println("EventDrivenPainter: Using Swing paint framework");
+        }
+
+
+        EventMouseListener mouseListener = new EventMouseListener();
+
+        addMouseListener(mouseListener);
+        addMouseMotionListener(mouseListener);
+
+    }
+
+    /**Adds an event to the event list. Each time this event is fired, <code>update()</code> is called.
+     *
+     * @param event Event to add (use class constants such as <code>MOUSERELEASE</code>).
+     */
+    public void addEvent(int event)
+    {
+        this.eventList.add(event);
+    }
+
+    /**Can be called as needed to refresh the painter. Updates state and re-renders. To do these separately, the
+     * <code>updateState()</code> and <code>render()</code> methods can be called.
+     */
+    public void update()
+    {
+
+        updateState();
+        render();
+    }
+        
+    
+    /**Updates data. Does not re-render. Call <code>render()</code> to re-render or <code>update()</code> to
+     * do both.
+     */
+    public void updateState()
+    {
+        if (lastUpdate != 0) interpolation = (System.nanoTime() - lastUpdate)/1000000000f;
+        //System.err.println("Secs since last update="+interpolation);
+        lastUpdate = System.nanoTime();
+
+        for (int i = 0; i < layerList.size();i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                layer.get(j).update(interpolation);
+            }
+        }
+
+    }
+
+    public void setDisplayScale(double x, double y)
+    {
+        this.displayScaleX = x;
+        this.displayScaleY = y;
+
+        double compWidth = getWidth();
+        double compHeight = getHeight();
+
+        double width = getWidth()/displayScaleX;
+        double height = getHeight()/displayScaleY;
+
+        returnSize.setSize(width, height);
+    }
+
+    /**Renders. Does not update data state. Call <code>updateState()</code> to update data state or <code>update()</code> to
+     * do both.
+     */
+    public void render()
+    {
+
+        if (!isActiveRendering())
+        {
+            //repaint();
+           //return;
+        }
+
+        //Active rendering
+        if (dbImage == null)
+        {
+            dbImage = createImage(getSize().width, getSize().height);
+
+            if (isActiveRendering())
+            {
+                System.out.println("EventDrivenPainter: Using active rendering");
+                System.out.println("EventDrivenPainter: Using standard AWT image for backbuffer");
+            }
+            //return;
+        }
+
+        //else
+        g2 = (Graphics2D)dbImage.getGraphics();
+
+        g2.setColor(background);
+        g2.fillRect(0,0,getSize().width,getSize().height);
+
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                layer.get(j).paintObject(g2);
+            }
+        }
+
+        if (isActiveRendering())
+        {
+
+            Graphics g;
+            try{
+                g = getGraphics();
+                if ((g != null) && (dbImage != null)){
+
+                    if (displayScaleX != 1d && displayScaleY != 1d)
+                    {
+                        g2 = (Graphics2D)g;
+
+                            g2.scale(displayScaleX,displayScaleY);
+                    }
+
+                    g.drawImage(dbImage,0,0,null);
+
+                    //if (((VolatileImage)dbImage).contentsLost()){
+                    //    System.err.println("Contents lost!");
+                    //}
+                }
+                Toolkit.getDefaultToolkit().sync();
+                g.dispose();
+
+            } catch (Exception e)
+            {
+                System.out.println("Graphics context error: "+e);
+            }
+        }
+        else
+        {
+            repaint();
+        }
+
+
+    }
+
+    private void reportCapabilities()
+    {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        GraphicsDevice gd = ge.getDefaultScreenDevice();
+        GraphicsConfiguration gc = gd.getDefaultConfiguration();
+
+        // Image Capabilities
+        ImageCapabilities imageCaps = gc.getImageCapabilities();
+
+        System.out.println("**************Graphics Device Capabilities************");
+        System.out.println("Image Caps. isAccelerated: " + imageCaps.isAccelerated() );
+        System.out.println("Image Caps. isTrueVolatile: " + imageCaps.isTrueVolatile());
+
+        // Buffer Capabilities
+        BufferCapabilities bufferCaps = gc.getBufferCapabilities();
+        System.out.println("Buffer Caps. isPageFlipping: " + bufferCaps.isPageFlipping());
+        System.out.println("Buffer Caps. Flip Contents: " +
+                                getFlipText(bufferCaps.getFlipContents()));
+        System.out.println("Buffer Caps. Full-screen Required: " +
+                                bufferCaps.isFullScreenRequired());
+        System.out.println("Buffer Caps. MultiBuffers: " + bufferCaps.isMultiBufferAvailable());
+        System.out.println("******************************************************");
+    } // end of reportCapabilities()
+
+
+    private String getFlipText(BufferCapabilities.FlipContents flip)
+    {
+        if (flip == null)
+            return "false";
+        else if (flip == BufferCapabilities.FlipContents.UNDEFINED)
+            return "Undefined";
+        else if (flip == BufferCapabilities.FlipContents.BACKGROUND)
+            return "Background";
+        else if (flip == BufferCapabilities.FlipContents.PRIOR)
+            return "Prior";
+        else // if (flip == BufferCapabilities.FlipContents.COPIED)
+            return "Copied";
+    } // end of getFlipTest()
+
+    private void initLayers(int numLayers)
+    {
+        this.setNumLayers(numLayers);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            layerList.add(new ArrayList());
+        }
+    }
+
+    /**For the layer the specified <code>Paintable</code> is in, this gives the index of it's
+     * position (layer within the layer).
+     * @param paintable A <code>Paintable</code>.
+     * @return The position of the <code>Paintable</code> within the layer it is currently being rendered. Return -1 if the <code>Paintable</code> cannot be found
+     */
+    public int getPositionInLayer(Paintable paintable)
+    {
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                if (paintable == layer.get(j)) return j;
+            }
+        }
+
+        //return -1 if paintable can't be found in layer list
+        return -1;
+    }
+
+    /**Brings a <code>Paintable</code> to the front of the layer it is in (so it is renderered last/on top).
+     *
+     * @param paintable <code>Paintable</code> to bring to front.
+     */
+    public void bringToFront(Paintable paintable)
+    {
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                if (paintable == layer.get(j))
+                {
+                    boolean removed = layer.remove(paintable);
+
+                    if (removed)
+                    {
+                        layer.add(paintable);
+                    }
+
+
+                    break;
+                }
+            }
+        }
+    }
+
+    /**Adds a {@link Paintable} to the lowest layer
+     *
+     * @param paintable <code>Paintable</code> object
+     */
+    public void addToPaintList(Paintable paintable)
+    {
+        if (paintable != null)
+            layerList.get(0).add(paintable);
+    }
+
+    /**Adds a {@link Paintable} to the specified layer
+     *
+     * @param paintable <code>Paintable</code> object
+     * @param layer Render layer
+     */
+    public void addToPaintList(Paintable paintable, int layer)
+    {
+        if (paintable != null)
+        {
+            layerList.get(layer).add(paintable);
+        }
+    }
+
+    /**Removes the specified {@link Paintable}.
+     *
+     * @param paintable <code>Paintable</code> object
+     */
+    public void removeFromPaintList(Paintable paintable)
+    {
+        if (paintable != null)
+        {
+            for (int i = 0; i < layerList.size(); i++)
+            {
+                ArrayList paintList = layerList.get(i);
+                if (paintList.contains(paintable))
+                {
+                    paintList.remove(paintable);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void removeAll()
+    {
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList layer = layerList.get(i);
+            layer.clear();
+        }
+    }
+
+    public void saveScreenshot(String filename, String type)
+    {
+        try {
+            ImageIO.write((BufferedImage)dbImage, type, new File(filename));
+        } catch (IOException ex)
+        {
+            System.err.println("GamePainter: Could not save screenshot to "+filename);
+        }
+    }
+
+    /**Sets the background color
+     *
+     * @param background background color
+     */
+    @Override
+    public void setBackground(Color background)
+    {
+        this.background = background;
+    }
+
+    /**Gets the background color
+     *
+     * @return background color
+     */
+    @Override
+    public Color getBackground()
+    {
+        return background;
+    }
+
+    /**Override of the <code>JComponent</code> method.*/
+    @Override
+    protected void paintComponent(Graphics g)
+    {
+        if (isActiveRendering()) return;
+
+        /*g2 = (Graphics2D)g;
+
+        g2.setColor(background);
+        g2.fillRect(0,0,getSize().width,getSize().height);
+
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                layer.get(j).paintObject(g2);
+            }
+        }*/
+
+        //Draw double-buffered image
+        g.drawImage(dbImage, 0, 0, this);
+    }
+
+     /**Gets the number of possible layers.
+     * @return the numLayers
+     */
+    public int getNumLayers() {
+        return numLayers;
+    }
+
+    /**Sets the number of layers.
+     * @param numLayers the numLayers to set
+     */
+    public void setNumLayers(int numLayers) {
+        this.numLayers = numLayers;
+    }
+
+    /**Returns the {@link JComponent} on which we are painting
+     *
+     * @return the <code>JComponent</code>
+     */
+    public JComponent getComponent()
+    {
+        return this;
+    }
+
+    public Dimension getSize()
+    {
+        if (returnSize == null) return super.getSize();
+        else return returnSize;
+    }
+
+    public static void main(String[] args)
+    {
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800,600);
+
+
+        EventDrivenPainter painter = new EventDrivenPainter(5,false);
+
+        Text text = new Text(new Font("sanserif",Font.PLAIN,30))
+        {
+            Color color = new Color(0,0,0);
+
+            @Override
+            public void update(float interpolation)
+            {
+                int red = color.getRed();
+                int blue = color.getBlue();
+                int green = color.getGreen();
+
+                if (red + 1 < 256)
+                {
+                    color = new Color(red+1,blue+1, green+1);
+                }
+                setColor(color);
+
+
+            }
+        };
+
+        text.setText("This will change value if updated!");
+        text.setLocation(400, 300);
+
+        //painter.addEvent(EventDrivenPainter.mouseMove);
+        painter.addEvent(EventDrivenPainter.MOUSEDRAG);
+        //painter.addEvent(EventDrivenPainter.mousePress);
+        painter.addToPaintList(text);
+
+        frame.getContentPane().add(painter);
+
+        frame.setVisible(true);
+
+    }
+
+    /**Returns true if active rendering is being used.
+     * @return the activeRendering
+     */
+    public boolean isActiveRendering() {
+        return activeRendering;
+    }
+
+    class EventMouseListener implements MouseListener, MouseMotionListener
+    {
+        public EventMouseListener(){}
+
+        public void mouseClicked(MouseEvent e) {}
+
+        public void mousePressed(MouseEvent e) 
+        {
+            if (eventList.contains(EventDrivenPainter.MOUSEPRESS)) update();
+        }
+
+        public void mouseReleased(MouseEvent e) 
+        {
+            if (eventList.contains(EventDrivenPainter.MOUSERELEASE)) update();
+        }
+
+        public void mouseEntered(MouseEvent e) {}
+
+        public void mouseExited(MouseEvent e) {}
+
+        public void mouseDragged(MouseEvent e) 
+        {
+            if (eventList.contains(EventDrivenPainter.MOUSEDRAG)) {
+                update();
+            }
+        }
+
+        public void mouseMoved(MouseEvent e) 
+        {
+            if (eventList.contains(EventDrivenPainter.MOUSEMOVE)) update();
+        }
+    }
+}

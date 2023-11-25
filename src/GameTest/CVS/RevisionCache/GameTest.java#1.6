@@ -1,0 +1,318 @@
+/*
+ * GameTest.java
+ *
+ * Created on August 3, 2009, 10:49 PM
+ *
+ * To change this template, choose Tools | Template Manager
+ * and open the template in the editor.
+ */
+
+package GameTest;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Point;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.util.ArrayList;
+import javax.imageio.ImageIO;
+
+import twodapi.audio.SimpleAudioPlayer;
+import twodapi.core.Frame2D;
+import twodapi.core.GamePainter;
+import twodapi.core.Paintable;
+import twodapi.core.Painter;
+import twodapi.core.Sprite2D;
+import twodapi.effects.ScreenFade;
+import twodapi.text.Text;
+import twodapi.text.TextAnnounce;
+
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class GameTest implements TestGame,Paintable
+{
+    private GamePainter painter;
+
+    private ShipSprite ship;
+
+    private AsteroidSprite[] asteroids;
+
+    private Blast[] blasts = new Blast[5];
+
+    private Explosion[] explosions = new Explosion[8];
+
+    private int lives = 3;
+
+    private BufferedImage background;
+
+    private int level = 1;
+
+    private Sprite2D lilShip = new Sprite2D("/images/ship.gif");
+
+    private Text numLivesDisplay = new Text("3",new Font("sanserif",Font.PLAIN,20),Color.GREEN,new Point(80,40));
+
+    private Text levelDisplay = new Text("Level:  1",new Font("sanserif",Font.PLAIN,20),Color.GREEN,new Point(300,40));
+
+    private SimpleAudioPlayer aPlayer = new SimpleAudioPlayer(new String[]{
+        "sounds/explosion.wav",
+        "sounds/explosion_high.wav",
+        "sounds/explosion_small.wav",
+        "sounds/laserfire3.wav",
+        "sounds/music.wav"
+    });
+
+    private TextAnnounce announce = new TextAnnounce(new Font("sanserif",Font.PLAIN,50));
+
+    public GameTest()
+    {
+
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,1024,768);
+
+        painter = (GamePainter)frame.getPainter();
+        painter.setFrameRate(30);
+        try {
+            background = ImageIO.read(this.getClass().getResource("/images/purple-galaxy-stars.jpg"));
+        } catch (IOException ex) {
+            System.out.println("Could not load background image!!");
+        }
+
+        initAsteroids(painter);
+        initBlasts(painter);
+        initExplosions(painter);
+
+        ship = new ShipSprite(painter,blasts,this);  
+
+        //ship.setVisible(false);
+
+        painter.addToPaintList(this,0);
+        painter.addToPaintList(ship,2);
+
+        
+        
+        lilShip.setPainter(painter);
+        lilShip.setScale(.5);
+        lilShip.setLocation(50, 40);
+        painter.addToPaintList(lilShip,3);
+        painter.addToPaintList(numLivesDisplay,3);
+        painter.addToPaintList(levelDisplay,3);
+        
+        
+        painter.setBackground(Color.BLACK);
+        ship.temporarilyHide();
+
+        printSoundList();
+
+        aPlayer.loopSound("sounds/music.wav");
+
+        Dimension size = painter.getComponent().getSize();
+        announce.setColor(new Color(30,90,255,150));
+        announce.setLocation(size.width/2,size.height/2);
+        announce.setAnnounceTime(4);
+        announce.setText("Level 1");
+
+        painter.addToPaintList(announce,4);
+        announce.showAnnounce();
+
+    }
+
+    private void initAsteroids(GamePainter painter)
+    {
+        asteroids = new AsteroidSprite[level*9];
+
+        for (int i = 0; i < asteroids.length; i++)
+        {
+            asteroids[i] = new AsteroidSprite(this);
+
+            asteroids[i].setScreenWrap(true, painter);
+
+            painter.addToPaintList(asteroids[i],2);
+
+            if (i < level)
+            {
+               //set location randomly
+                int x = (int)(Math.random()*painter.getComponent().getSize().width);
+                int y = (int)(Math.random()*painter.getComponent().getSize().height);
+
+                asteroids[i].setLocation(x, y);
+                asteroids[i].setVisible(true);
+            }
+
+        }
+    }
+
+    public AsteroidSprite[] getAsteroids()
+    {
+        return asteroids;
+    }
+
+    public void showExplosion(int x, int y)
+    {
+        Explosion expl = null;
+
+        for (int i = 0; i < explosions.length; i++)
+        {
+            if (!explosions[i].isVisible())
+            {
+                expl = explosions[i];
+                break;
+            }
+        }
+
+        if (expl != null)
+        {
+            expl.setLocation(x, y);
+            expl.update(0);
+            expl.setVisible(true);
+            expl.animateOnce();
+
+        }
+        else
+        {
+            System.out.println("Warning: Couldn't get an explosion from the queue to show!");
+        }
+    }
+
+    private void initBlasts(Painter painter)
+    {
+        for (int i = 0; i < blasts.length; i++)
+        {
+            blasts[i] = new Blast(20,painter);
+            blasts[i].setVisible(false);
+
+            painter.addToPaintList(blasts[i],2);
+        }
+    }
+
+    private void initExplosions(GamePainter painter)
+    {
+        for (int i = 0; i < explosions.length; i++)
+        {
+            explosions[i] = new Explosion(painter);
+            painter.addToPaintList(explosions[i],1);
+        }
+    }
+
+    private void printSoundList()
+    {
+        ArrayList list = aPlayer.getSoundList();
+
+        System.out.println("\nSound list\n_______________________________");
+
+        for (int i = 0; i < list.size(); i++)
+        {
+            System.out.println("   "+list.get(i));
+        }
+
+        System.out.println("");
+    }
+
+    public void update(float interpolation)
+    {
+        //check for ship/asteroid collisions
+        if ( ship.isVisible())
+        {
+            for (int i = 0; i < asteroids.length; i++)
+            {
+                if (asteroids[i].isVisible() && ship.collidesWith(asteroids[i]))
+                {
+                    aPlayer.playSound("sounds/explosion_high.wav");
+                    ship.explode();
+                    
+                }
+
+                //check for blast/asteroid collisions
+                for (int j = 0; j < blasts.length; j++)
+                {
+                    if (blasts[j].isVisible() && blasts[j].collidesWith(asteroids[i]))
+                    {
+                        asteroids[i].explode();
+                        blasts[j].setVisible(false);
+                        checkForNextLevel();
+                        break;
+                    }
+                }
+            }
+        }    
+    }
+
+    private void checkForNextLevel()
+    {
+        boolean nextLevel = true;
+
+        for (int i = 0; i < asteroids.length; i++)
+        {
+            if (asteroids[i].isVisible())
+            {
+                nextLevel = false;
+                break;
+            }
+        }
+
+        if (nextLevel)
+        {
+            level++;
+            ship.temporarilyHide();
+            initAsteroids(painter);
+            announce.setText("Level "+level);
+            announce.showAnnounce();
+
+            levelDisplay.setText("Level:  "+level);
+        }
+    }
+
+    public SimpleAudioPlayer getSoundPlayer()
+    {
+        return aPlayer;
+    }
+
+    public GamePainter getPainter()
+    {
+        return painter;
+    }
+
+    public int getNumLives()
+    {
+        return lives;
+    }
+
+    public void removeLife()
+    {
+            lives--;
+
+            if (lives >= 0) numLivesDisplay.setText(""+lives);
+    }
+
+    public void gameOver()
+    {
+        Dimension size = painter.getComponent().getSize();
+
+        ScreenFade fadeOut = new ScreenFade(painter,Color.BLACK);
+        painter.addToPaintList(fadeOut, 4);
+
+        Text gameEndText = new Text("Game Over",new Font("sanserif",Font.BOLD,60),Color.RED,new Point(size.width/2,size.height/2));
+        painter.addToPaintList(gameEndText,4);
+
+        fadeOut.setFadeSpeed(.5f);
+        fadeOut.fadeOut();
+    }
+
+    public void paintObject(Graphics g)
+    {
+        if (background != null)
+        {
+            g.drawImage(background, 0, 0, null);
+        }
+    }
+
+    public static void main(String[] args)
+    {
+        GameTest gameTest = new GameTest();
+
+
+    }
+}

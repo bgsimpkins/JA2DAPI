@@ -1,0 +1,582 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.awt.Graphics;
+import java.awt.Toolkit;
+import java.awt.Graphics2D;
+import java.awt.Color;
+import java.awt.ImageCapabilities;
+import java.awt.BufferCapabilities;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+
+import java.awt.GridLayout;
+import java.awt.GraphicsConfiguration;
+
+import java.awt.Image;
+
+import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.imageio.ImageIO;
+import javax.swing.event.AncestorListener;
+import javax.swing.event.AncestorEvent;
+
+import javax.swing.*;
+
+/**Manages painting of <code>Paintable objects</code> using an AnimationThread for timing
+ * and a layer system for layering. The default number of layers is 5, but this
+ * can be specified in the <code>Painter(JComponent, int)<code> constructor. The layers are painted in an
+ * order so that layer 0 is painted first and higher layers afterwards (so, in the case of
+ * 5 layers, O is lowest and 4 is highest).
+ *
+ * @author ben
+ */
+public class GamePainter implements Painter, Animatable
+{
+    //private ArrayList<Paintable> paintList = new ArrayList();
+    private AnimationThread thread;
+    
+    private ArrayList<ArrayList<Paintable>> layerList = new ArrayList();
+    
+    private int numLayers;
+    
+    private Graphics2D g2;
+
+    private Image dbImage = null;
+    
+    private JComponent comp;
+
+    private Color background = Color.LIGHT_GRAY;
+
+    private boolean useVolatile = false;
+
+    private boolean graphicsUpdate = false;
+
+    private ArrayList<Paintable> customRenderers = new ArrayList();
+
+    private Paintable lockedPaintable = null;
+
+    /**Creates a new instance of GamePainter using the default number of layers (5)
+     * and the default frame rate of 50 FPS
+     *
+     * @param comp The <code>JComponent</comp> on which this Painter paints.
+     */
+    public GamePainter(JComponent comp)
+    {
+        reportCapabilities();
+        
+        thread = new AnimationThread();
+        initLayers(5);
+        
+        this.comp = comp;
+        
+        thread.addListener(this);
+
+        comp.addAncestorListener(new AddComponentListener());
+        //starting the animation thread here is problematic
+        //thread.start();
+    }
+
+    /**Creates a new instance of GamePainter using the default number of layers (5)
+     * and the specified frame rate
+     *
+     * @param comp The <code>JComponent</comp> on which this Painter paints.
+     * @param fps Frame rate (in frames/sec)
+     */
+    public GamePainter(JComponent comp, int fps)
+    {
+        reportCapabilities();
+        
+        thread = new AnimationThread(fps);
+        initLayers(5);
+        
+        this.comp = comp;
+        
+        thread.addListener(this);
+        comp.addAncestorListener(new AddComponentListener());
+        //starting the animation thread here is problematic
+        //thread.start();
+    }
+
+    /**Creates a new instance of GamePainter using the default number of layers (5)
+     * and the specified frame rate
+     *
+     * @param comp The <code>JComponent</comp> on which this Painter paints.
+     * @param fps Frame rate (in frames/sec)
+     * @param numLayers Number of layers
+     */
+    public GamePainter(JComponent comp, int fps, int numLayers)
+    {
+        reportCapabilities();
+        
+        thread = new AnimationThread(fps);
+        initLayers(numLayers);
+        
+        this.comp = comp;
+
+        thread.addListener(this);
+
+        comp.addAncestorListener(new AddComponentListener());
+        //thread.start();
+    }
+    
+    private void reportCapabilities()
+    {
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        GraphicsDevice gd = ge.getDefaultScreenDevice();
+        GraphicsConfiguration gc = gd.getDefaultConfiguration();
+
+        // Image Capabilities
+        ImageCapabilities imageCaps = gc.getImageCapabilities();
+        
+        System.out.println("**************Graphics Device Capabilities************");
+        System.out.println("Image Caps. isAccelerated: " + imageCaps.isAccelerated() );
+        System.out.println("Image Caps. isTrueVolatile: " + imageCaps.isTrueVolatile());
+
+        // Buffer Capabilities
+        BufferCapabilities bufferCaps = gc.getBufferCapabilities();
+        System.out.println("Buffer Caps. isPageFlipping: " + bufferCaps.isPageFlipping());
+        System.out.println("Buffer Caps. Flip Contents: " + 
+                                getFlipText(bufferCaps.getFlipContents()));
+        System.out.println("Buffer Caps. Full-screen Required: " + 
+                                bufferCaps.isFullScreenRequired());
+        System.out.println("Buffer Caps. MultiBuffers: " + bufferCaps.isMultiBufferAvailable());
+        System.out.println("******************************************************");
+    } // end of reportCapabilities()
+
+
+    private String getFlipText(BufferCapabilities.FlipContents flip) 
+    {
+        if (flip == null)
+            return "false";
+        else if (flip == BufferCapabilities.FlipContents.UNDEFINED)
+            return "Undefined";
+        else if (flip == BufferCapabilities.FlipContents.BACKGROUND)
+            return "Background";
+        else if (flip == BufferCapabilities.FlipContents.PRIOR)
+            return "Prior";
+        else // if (flip == BufferCapabilities.FlipContents.COPIED)
+            return "Copied";
+    } // end of getFlipTest()
+
+       
+    private void initLayers(int numLayers)
+    {
+        this.setNumLayers(numLayers);
+        
+        for (int i = 0; i < numLayers; i++)
+        {
+            layerList.add(new ArrayList());
+        }
+    }
+
+    /**For the layer the specified <code>Paintable</code> is in, this gives the index of it's
+     * position (layer within the layer).
+     * @param paintable A {@link Paintable}.
+     * @return The position of the <code>Paintable</code> within the layer it is currently being rendered. Return -1 if the <code>Paintable</code> cannot be found
+     */
+    public int getPositionInLayer(Paintable paintable)
+    {
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                if (paintable == layer.get(j)) return j;
+            }
+        }
+
+        //return -1 if paintable can't be found in layer list
+        return -1;
+    }
+
+    /**Brings a {@link Paintable} to the front of the layer it is in (so it is renderer last/on top).
+     *
+     * @param paintable <code>Paintable</code> to bring to front.
+     */
+    public void bringToFront(Paintable paintable)
+    {
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+
+            for (int j = 0; j < layer.size(); j++)
+            {
+                if (paintable == layer.get(j))
+                {
+                    boolean removed = layer.remove(paintable);
+
+                    if (removed)
+                    {
+                        layer.add(paintable);
+                    }
+                    
+
+                    break;
+                }
+            }
+        }
+    }
+    
+    /**Adds a {@link Paintable} to the lowest layer
+     * 
+     * @param paintable <code>Paintable</code> object
+     */
+    public void addToPaintList(Paintable paintable)
+    {
+        if (paintable != null)
+            layerList.get(0).add(paintable);
+    }
+
+    /**Adds a {@link Paintable} to the specified layer
+     *
+     * @param paintable <code>Paintable</code> object
+     * @param layer Render layer
+     */
+    public void addToPaintList(Paintable paintable, int layer)
+    {
+        if (paintable != null)
+        {
+            layerList.get(layer).add(paintable);
+        }
+    }
+
+    /**Removes the specified {@link Paintable}.
+     *
+     * @param paintable <code>Paintable</code> object
+     */
+    public void removeFromPaintList(Paintable paintable)
+    {
+        if (paintable != null)
+        {
+            for (int i = 0; i < layerList.size(); i++)
+            {
+                ArrayList paintList = layerList.get(i);
+                if (paintList.contains(paintable))
+                {
+                    paintList.remove(paintable);
+                }
+            }
+        }
+    }
+
+    /**Intend to lock a <code>Paintable</code> so no other Paintables
+     * would get updated/rendered. Currently does not work well
+     *
+     * @param paintable <code>Paintable</code> object
+     */
+    public void lock(Paintable paintable)
+    {
+        lockedPaintable = paintable;
+    }
+
+    /**Intend to unlock a locked <code>Paintable</code> so other Paintables
+     * would get updated/rendered. Currently does not work well
+     *
+     */
+    public void unlock()
+    {
+        lockedPaintable = null;
+    }
+
+    /**Adds a custom renderer to the custom renderer list. The specified <code>Paintable</code> will be
+     * updated after other <code>Paintables</code> are updated and will be rendered immediately before the
+     * double buffered image containing all other graphics is rendered. NOTE: This currently isn't very useful.
+     *
+     * @param renderer <code>Paintable</code> object
+     */
+    public void addCustomRenderer(Paintable renderer)
+    {
+        customRenderers.add(renderer);
+    }
+
+    /**Removes a custom renderer to the custom renderer list.
+     * 
+     * @param renderer <code>Paintable</code> object
+     */
+    public void removeCustomRenderer(Paintable renderer)
+    {
+        customRenderers.remove(renderer);
+    }
+
+    public void removeAll()
+    {
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList layer = layerList.get(i);
+            layer.clear();
+        }
+    }
+
+    public void saveScreenshot(String filename, String type)
+    {
+        try {
+            ImageIO.write((BufferedImage)dbImage, type, new File(filename));
+        } catch (IOException ex)
+        {
+            System.err.println("GamePainter: Could not save screenshot to "+filename);
+        }
+    }
+
+    /**If the internal {@link AnimationThread} is not running, this will start it.
+     * 
+     */
+    public void start()
+    {
+        if (!thread.isRunning()) 
+        {
+            System.out.println("Painter: Starting animation thread.");
+            thread.start();
+        }
+    }
+
+    /**Sets the frame rate of the animation thread
+     *
+     * @param fps Frames per second
+     */
+    public void setFrameRate(int fps)
+    {
+        thread.setFrameRate(fps);
+    }
+
+    /**Sets the background color
+     *
+     * @param background background color
+     */
+    public void setBackground(Color background)
+    {
+        this.background = background;
+    }
+
+    /**Gets the background color
+     *
+     * @return background color
+     */
+    public Color getBackground()
+    {
+        return background;
+    }
+
+    /**Returns the {@link JComponent} on which we are painting
+     *
+     * @return the <code>JComponent</code>
+     */
+    public JComponent getComponent()
+    {
+        return comp;
+    }
+
+    /**Override of the {@link Animatable} method. Do not call directly*/
+    public void updateState(float interpolation)
+    {
+        if (lockedPaintable == null)
+        {
+
+            for (int i = 0; i < layerList.size();i++)
+            {
+                ArrayList<Paintable> layer = layerList.get(i);
+
+                for (int j = 0; j < layer.size(); j++)
+                {
+                    layer.get(j).update(interpolation);
+                }
+            }
+        }
+        else
+        {
+            //System.out.println("Updating locked paintable");
+            lockedPaintable.update(interpolation);
+        }
+
+        //update custom renderers
+        for (int i = 0; i < customRenderers.size(); i++)
+        {
+            customRenderers.get(i).update(interpolation);
+        }
+    }
+
+    /**If <code>true</code> sets this Painter to use a <code>VolatileImage</code> as a backbuffer, which may improve
+     * performance in some situations.
+     *
+     * NOTE: The <code>VolatileImage</code> API is not currently being properly used to handle cases where the image
+     * is lost. Some performance increase has been noticed on Linux systems, however, this
+     * method should not be used in applications that will regularly run in Windows environments.
+     *
+     * @param b True if a <code>VolatileImage</code> backbuffer is to be used
+     */
+    public void setUseVolatileBackbuffer(boolean b)
+    {
+        this.useVolatile = b;
+        this.graphicsUpdate = true;
+
+    }
+
+    /**Override of the {@link Animatable} method. Do not call directly*/
+    public void render()     
+    {
+
+        if (useVolatile && (dbImage == null || graphicsUpdate)){
+            dbImage = comp.createVolatileImage(comp.getSize().width,comp.getSize().height);
+            graphicsUpdate = false;
+            System.out.println("Painter: Using volatile image for backbuffer");
+            return;
+        }
+
+        else if (!useVolatile && (dbImage == null || graphicsUpdate))
+        {
+            dbImage = comp.createImage(comp.getSize().width, comp.getSize().height);
+            graphicsUpdate = false;
+            System.out.println("Painter: Using standard AWT image for backbuffer");
+            return;
+        }
+
+        else g2 = (Graphics2D)dbImage.getGraphics();
+        
+        
+        g2.setColor(background);
+        g2.fillRect(0,0,comp.getSize().width,comp.getSize().height);
+        
+        for (int i = 0; i < layerList.size(); i++)
+        {
+            ArrayList<Paintable> layer = layerList.get(i);
+            
+            for (int j = 0; j < layer.size(); j++)
+            {
+                layer.get(j).paintObject(g2);
+            }
+        }        
+
+        
+
+        Graphics g;
+        try{
+            g = comp.getGraphics();
+            if ((g != null) && (dbImage != null)){
+                //Run custom renderers
+                for (int i = 0; i < customRenderers.size(); i++)
+                {
+                    customRenderers.get(i).paintObject(g);
+                }
+                g.drawImage(dbImage,0,0,null);
+                
+                //if (((VolatileImage)dbImage).contentsLost()){
+                //    System.err.println("Contents lost!");
+                //}
+            }
+            Toolkit.getDefaultToolkit().sync();
+            g.dispose();
+            
+        } catch (Exception e)
+        {
+            System.out.println("Graphics context error: "+e);
+        }
+    }
+
+    /**Returns the internal {@link AnimationThread}
+     *
+     * @return the <code>AnimationThread</code>
+     */
+    public AnimationThread getAnimationThread()
+    {
+        return thread;
+    }
+
+    public static void main(String[] args)
+    {
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(400,400);
+        
+        JPanel panel = new JPanel();
+        final GamePainter thePainter = new GamePainter(panel);
+        final Sprite2D flame = new Sprite2D("/images/gas.png");
+
+        final KeyControls kControls = new KeyControls(panel);
+        kControls.set(KeyEvent.VK_ENTER);
+
+        Sprite2D aster = new Sprite2D("/images/Asteroid.png"){
+
+            float xMove = 0;
+            float yMove = 0;
+
+            @Override
+            public void updateState(float interpolation)
+            {
+                
+                
+                xMove = 50*interpolation;
+                yMove = -50*interpolation;
+
+                System.out.println("xMove:"+xMove);
+
+                this.move((int)Math.round(xMove),(int)Math.round(yMove));
+                
+                System.out.println("Location="+this.getLocation().toString());
+                this.rotate(Math.PI/64);
+                if (collidesWith(flame)) 
+                {
+                    System.out.println("Collision!");
+                   //setVisible(false);
+                }
+
+
+                if (kControls.isTapped(KeyEvent.VK_ENTER))
+                {
+                    thePainter.saveScreenshot("screenshot_test.png", "PNG");
+                }
+            }
+        };
+        
+        //aster.setBoundsVisible(true);
+        //flame.setBoundsVisible(true);
+        aster.setLocation(50,280);
+        flame.setLocation(200,100);
+        
+        thePainter.addToPaintList(aster);
+        thePainter.addToPaintList(flame);
+                
+        frame.getContentPane().setLayout(new GridLayout(1,1));
+        frame.getContentPane().add(panel);
+
+        frame.setVisible(true);
+
+        thePainter.bringToFront(aster);
+    }
+
+    /**Returns the number of layers
+     * @return the numLayers
+     */
+    public int getNumLayers() {
+        return numLayers;
+    }
+
+    /**Sets the number of layers
+     * @param numLayers the numLayers to set
+     */
+    public void setNumLayers(int numLayers) {
+        this.numLayers = numLayers;
+    }
+
+    /**This internal class is used to detect when the component associated with this Painter
+     * object is added to a higher level component. When this happens, the animation thread
+     * is started. If the animation thread is started any earlier than this, initialization
+     * sequencing problems can arise.
+     */
+    class AddComponentListener implements AncestorListener
+    {
+        public void ancestorAdded(AncestorEvent e)
+    {
+        start();
+    }
+        public void ancestorRemoved(AncestorEvent e){}
+        public void ancestorMoved(AncestorEvent e){}
+    }
+}

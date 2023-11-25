@@ -1,0 +1,286 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import java.awt.Dimension;
+import java.awt.Point;
+import java.util.ArrayList;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.util.vector.Vector2f;
+import org.lwjgl.util.vector.Vector3f;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class PolygonGL implements PaintableGL
+{
+
+    private ArrayList<Vector2f> vertices = new ArrayList();
+    private ArrayList<Vector3f> colors = new ArrayList();
+
+    private Vector2f location = new Vector2f();
+
+    private Dimension size;
+
+    private float alpha = 1f;
+
+    private Vector2f scale = new Vector2f(1f,1f);
+
+    private float angle = 0f;
+
+    private Dimension originalSize;
+
+    public void addVertices(Vector2f[] verts)
+    {
+        for (int i = 0; i < verts.length;i++)
+        {
+            vertices.add(verts[i]);
+        }
+        updateSize();
+    }
+
+    public void addVertex(float x, float y)
+    {
+        vertices.add(new Vector2f(x,y));
+        updateSize();
+    }
+
+    public void clearVertices()
+    {
+        vertices.clear();
+    }
+
+    public void addColors(Vector3f[] cs)
+    {
+        for (int i = 0; i < cs.length; i++)
+        {
+            colors.add(cs[i]);
+        }
+    }
+
+    public void addColor(Vector3f c)
+    {
+        this.colors.add(c);
+    }
+
+    public void clearColor()
+    {
+        colors.clear();
+    }
+
+    public void setTransparency(float alpha)
+    {
+        this.alpha = alpha;
+    }
+
+    public float getTransparency()
+    {
+        return alpha;
+    }
+
+    public void setLocation(int x, int y)
+    {
+        location.set(x, y);
+    }
+
+    public void move(float x, float y)
+    {
+        this.location.set(location.getX()+x, location.getY()+y);
+    }
+
+    /**Radial move. Moves the sprite the specified distance in the specified direction.
+     *
+     * @param theta Angle/direction of movement (in radians)
+     * @param distance Distance to move
+     */
+    public void moveRadial(float theta, float distance)
+    {
+        theta = (float)Math.toRadians(theta);
+
+        //float x = (float)(Math.cos(theta-Math.PI/2f) * distance);
+        //float y = (float)(Math.sin(theta-Math.PI/2f) * distance);
+        float x = (float)(Math.cos(theta) * distance);
+        float y = (float)(Math.sin(theta) * distance);
+        location.set(location.getX()+x,location.getY()+y);
+    }
+
+    public Vector2f getLocation()
+    {
+        return location;
+    }
+
+    public void scale(float xScale, float yScale)
+    {
+        this.scale.x = this.scale.x*xScale;
+        this.scale.y = this.scale.y*yScale;
+        size.width = (int)(originalSize.width*this.scale.x);
+        size.height = (int)(originalSize.height*this.scale.y);
+    }
+
+    public void setScale(float xScale,float yScale)
+    {
+        this.scale.x = xScale;
+        this.scale.y = yScale;
+        size.width = (int)(originalSize.width*this.scale.x);
+        size.height = (int)(originalSize.height*this.scale.y);
+    }
+
+    public void rotate(float r)
+    {
+        angle += r;
+
+        //check for wraparound
+        /*if (this.angle > 2*(float)Math.PI)
+            this.angle = this.angle - 2*(float)Math.PI;
+
+        else if (this.angle < 0)
+            this.angle = 2*(float)Math.PI + this.angle;*/
+    }
+
+    public void setRotation(float angle)
+    {
+        this.angle = angle;
+    }
+
+    public float getRotation()
+    {
+        return angle;
+    }
+
+    public Dimension getSize()
+    {
+        return size;
+    }
+
+    private void updateSize()
+    {
+        Point topLeft = new Point();
+        Point bottomRight = new Point();
+
+        for (int i = 0; i < vertices.size(); i++)
+        {
+            Vector2f vert = vertices.get(i);
+            if (vert.x < topLeft.x) topLeft.x = (int)vert.x;
+            else if (vert.x > bottomRight.x) bottomRight.x = (int)vert.x;
+
+            if (vert.y < topLeft.y) topLeft.y = (int)vert.y;
+            else if (vert.y > bottomRight.y) bottomRight.y = (int)vert.y;
+        }
+
+        int width = bottomRight.x - topLeft.x;
+        int height = bottomRight.y - topLeft.y;
+
+        size = new Dimension(width,height);
+
+        if (originalSize == null) {
+            originalSize = new Dimension();
+        }
+            originalSize.setSize(width,height);
+
+    }
+
+    public void draw(float interpolation)
+    {
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+
+        GL11.glTranslatef(location.x, location.y, 0);
+        GL11.glScalef(scale.x, scale.y, 1);
+        GL11.glRotatef(angle, 0, 0, 1f);
+
+        //This final translation centers the sprite on the location x,y cooreds
+        //GL11.glTranslatef(-originalSize.width/2, -originalSize.height/2, 0);
+
+        boolean multiColor = false;
+
+        if (colors.size() > 1) multiColor = true;
+
+        if (!multiColor)
+        {
+            Vector3f color = colors.get(0);
+            GL11.glColor4f(color.x,color.y,color.z,alpha);
+        }
+        //GL11.glLineWidth(2f);
+        GL11.glBegin(GL11.GL_POLYGON);
+        {
+            for (int i = 0; i < vertices.size(); i++)
+            {
+                if (multiColor)
+                {
+                    Vector3f color = colors.get(i);
+                    GL11.glColor4f(color.x,color.y,color.z,alpha);
+                }
+                Vector2f vert = vertices.get(i);
+
+                GL11.glVertex2f(vert.x, vert.y);
+                
+            }
+
+
+
+        }
+        GL11.glEnd();
+
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+    }
+
+    public static void main(String[] args)
+    {
+	GLPainter painter = new GLPainter(800,600)
+	{
+        PolygonGL p;
+        boolean shrink = true;
+        @Override
+        public void gameInit()
+        {   
+            //setFullscreen(true);
+
+            setBackground("/images/purple-galaxy-stars.jpg");
+
+            p = new PolygonGL();
+            
+            p.setTransparency(.6f);
+            for (int i = 1; i <= 5; i++)
+            {
+                double theta = i*(2*Math.PI/5) - Math.PI/2;
+                float x = (float)Math.cos(theta) * 100;
+                float y = (float)Math.sin(theta) * 100;
+                p.addVertex(x, y);
+
+            }
+
+            p.setLocation(0,0);
+
+            p.addColor(new Vector3f(1,1,1));
+            p.addColor(new Vector3f(.9f,.8f,.8f));
+            p.addColor(new Vector3f(.8f,.6f,.6f));
+            p.addColor(new Vector3f(.7f,.4f,.4f));
+            p.addColor(new Vector3f(.6f,.2f,.2f));
+
+            this.addToPaintList(p);
+
+            p.scale(2,1);
+        }
+
+            @Override
+        public void gameUpdate(float interpolation)
+        {
+            p.moveRadial(45, 150*interpolation);
+            p.rotate(100*interpolation);
+            float scaleAmt = 1.5f;
+
+            if (p.getSize().width > 225) shrink = true;
+            else if (p.getSize().width < 175) shrink = false;
+
+            if (shrink) p.scale(1-scaleAmt*interpolation,1-scaleAmt*interpolation);
+            else p.scale(1+scaleAmt*interpolation,1+scaleAmt*interpolation);
+
+
+        }
+	};         
+    }
+
+}

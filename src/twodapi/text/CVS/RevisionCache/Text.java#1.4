@@ -1,0 +1,186 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.text;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import javax.swing.SwingUtilities;
+import twodapi.core.Paintable;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class Text implements Paintable
+{
+    private Point location = new Point(0,0);
+    private Font font = new Font("sanserif",Font.PLAIN,12);
+    private String text = "";
+    private Color color = Color.BLACK;
+
+    private boolean visible = true;
+
+    private FontMetrics fontMetrics = null;
+
+    private Dimension size = new Dimension();
+
+    private boolean centerText = false;
+
+    private Rectangle bounds;
+
+    private boolean drawBounds = false;
+
+    public Text(){}
+
+    public Text(Font font)
+    {
+        this.font = font;
+    }
+
+    public Text(String text, Font font, Color color, Point location)
+    {
+        this.text = text;
+        this.font = font;
+        this.color = color;
+        this.location = location;
+    }
+
+    public void setFont(Font font)
+    {
+        this.font = font;
+        fontMetrics = null;
+    }
+
+    public Font getFont()
+    {
+        return font;
+    }
+
+    public void setColor(Color color)
+    {
+        this.color = color;
+    }
+
+    public Color getColor()
+    {
+        return color;
+    }
+
+    public void setText(String text)
+    {
+        this.text = text;
+        fontMetrics = null;
+    }
+
+    public void setBoundsVisible(boolean vis)
+    {
+        this.drawBounds = vis;
+
+        if (vis && bounds == null) bounds = new Rectangle(0,0,size.width,size.height);
+    }
+
+    public boolean isBoundsVisible()
+    {
+        return drawBounds;
+    }
+
+    public String getText()
+    {
+        return text;
+    }
+
+    public void setLocation(Point loc)
+    {
+        this.location.setLocation(loc);
+    }
+
+    public void setLocation(int x, int y)
+    {
+        this.location.setLocation(x,y);
+    }
+
+    public Point getLocation()
+    {
+        return location;
+    }
+
+    public Dimension getSize()
+    {
+        return size;
+    }
+
+    public void update(float interpolation){}
+
+    public void paintObject(Graphics g)
+    {
+        if (!visible) return;
+   
+        Graphics2D g2 = (Graphics2D)g;
+        Color oldColor = g2.getColor();
+        g2.setFont(font);
+        g2.setColor(color);
+
+        if (fontMetrics == null)
+        {
+            fontMetrics = g2.getFontMetrics();
+            int width = SwingUtilities.computeStringWidth(fontMetrics, text);
+            int height = fontMetrics.getHeight();
+            size.setSize(width,height);
+            if (bounds != null) bounds.setSize(width, height);
+        }
+
+        if (this.centerText) g2.drawString(text, location.x - size.width/2,location.y+fontMetrics.getAscent()-size.height/2);
+        else g2.drawString(text, location.x,location.y+fontMetrics.getAscent());
+
+        if (drawBounds)
+        {
+            g2.setColor(Color.ORANGE);
+            if (centerText)
+            {
+
+                bounds.setLocation(location.x-size.width/2, location.y-size.height/2);
+                g2.draw(bounds);
+            }
+            else
+            {
+                bounds.setLocation(location.x, location.y);
+                g2.draw(bounds);
+            }
+        }
+        g2.setColor(oldColor);
+
+    }
+
+    /**
+     * @return the visible
+     */
+    public boolean isVisible() {
+        return visible;
+    }
+
+    /**
+     * @param visible the visible to set
+     */
+    public void setVisible(boolean visible) {
+        this.visible = visible;
+    }
+
+    public void setCenterText(boolean center)
+    {
+        this.centerText = center;
+    }
+
+    public boolean isTextCentered()
+    {
+        return centerText;
+    }
+}

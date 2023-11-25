@@ -1,0 +1,133 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import org.lwjgl.input.Keyboard;
+
+/**
+ *
+ * @author ben
+ */
+public class GLTest extends GLPainter
+{
+    GLPainter painter;
+
+    SpriteGL asteroid,ship;
+
+    FlipBookSpriteGL blast;
+
+
+    private int laserBlast, music;
+
+    private KeyControlsGL keyControls;
+
+    public GLTest()
+    {
+
+        super(800,600);
+
+        //soundPlayer = new ALPlayer();
+        
+
+    }
+
+    @Override
+    protected void gameInit()
+    {
+        keyControls = createKeyControls();
+        keyControls.set(Keyboard.KEY_LEFT);
+        keyControls.set(Keyboard.KEY_RIGHT);
+        keyControls.set(Keyboard.KEY_UP);
+        keyControls.set(Keyboard.KEY_DOWN);
+        keyControls.set(Keyboard.KEY_SPACE);
+
+        //setFullscreen(true);
+
+        setBackground("/images/purple-galaxy-stars.jpg");
+
+        asteroid = new SpriteGL("/images/Asteroid.gif");
+        asteroid.setScreenWrap(true, this);
+        this.addToPaintList(asteroid,1);
+
+        ship = new SpriteGL("/images/ship.gif");
+        ship.setLocation(400, 300);
+        ship.setScale(.7f, .7f);
+        ship.setScreenWrap(true, this);
+        this.addToPaintList(ship);
+
+        blast = new FlipBookSpriteGL("/images/fireball.gif");
+        blast.setLocation(100, 100);
+        blast.setFrameDuration(.05f);
+        //blast.setTransparency(.6f);
+        blast.setVisible(false);
+        //blast.animateOnce();
+        this.addToPaintList(blast);
+    }
+
+    @Override
+    public void gameUpdate(float interpolation)
+    {
+        
+
+        asteroid.moveRadial(45,interpolation*100);
+        asteroid.rotate(interpolation*180);
+
+        if (blast.isVisible())
+        {
+
+            blast.moveRadial(blast.getRotation(), interpolation*500);
+        }
+
+
+        if (keyControls.isPressed(Keyboard.KEY_RIGHT))
+        {
+            ship.rotate(interpolation*450);
+        }
+        else if (keyControls.isPressed(Keyboard.KEY_LEFT))
+        {
+            ship.rotate(-interpolation*450);
+        }
+
+        if (keyControls.isPressed(Keyboard.KEY_UP))
+        {
+            ship.moveRadial(ship.getRotation()-90, interpolation*200);
+        }
+
+        if (keyControls.isTapped(Keyboard.KEY_SPACE))
+        {
+            fireBlast();
+        }
+
+        if (ship.collidesWith(asteroid))
+        {
+            ship.setDrawBounds(true);
+        }
+        else ship.setDrawBounds(false);
+
+    }
+
+    private void fireBlast()
+    {
+        //soundPlayer.playSound(laserBlast);
+
+        blast.setLocation(ship.getLocation());
+        blast.setRotation(ship.getRotation()-90);
+        blast.moveRadial(blast.getRotation(), 30);
+        blast.setVisible(true);
+        //blast.animateLoop();
+        
+    }
+
+
+        
+        
+
+
+    public static void main(String[] args)
+    {
+        new GLTest();
+    }
+}

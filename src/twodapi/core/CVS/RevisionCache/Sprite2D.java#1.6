@@ -1,0 +1,668 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.awt.AlphaComposite;
+import java.awt.RenderingHints;
+import javax.swing.*;
+
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Dimension;
+import java.awt.image.BufferedImage;
+import java.awt.image.VolatileImage;
+import java.awt.Color;
+import java.awt.Rectangle;
+import java.awt.Shape;
+//import java.awt.RenderingHints;
+
+import java.awt.geom.*;
+import java.awt.BasicStroke;
+
+import java.io.IOException;
+
+import javax.imageio.ImageIO;
+
+/**A sprite class that encapsulates an image-based display object and its position, rotation, and scale. It also
+ * features methods for easily manipulating rotation and scale as well as collision checking.
+ *
+ * @author ben
+ */
+public class Sprite2D implements Paintable 
+{
+    private Shape shape = null;
+    
+    private static final int IMAGE = 1;
+    private static final int VOLATILE_IMAGE = 2;
+    
+    private int spriteType = 1;
+    
+    private BufferedImage image = null;
+    private VolatileImage vImage = null;
+    protected AffineTransform transform = new AffineTransform();
+    protected Point location = new Point(0,0);
+    protected Dimension size = null;
+    
+    //private Point spriteCenter = new Point();
+
+    private double theta = 0;
+
+    private double scale = 1;
+    
+    protected Rectangle boundsRect = new Rectangle();
+    
+    private Shape transformedRect;
+    
+    protected boolean drawBounds = false;
+    
+    protected boolean isVisible = true;
+    
+    protected Painter painter = null;
+    
+    protected boolean screenWrap = false;
+
+    private Dimension originalSize = null;
+
+    private boolean antiAlias = false;
+ 
+    /**Creates a new instance of <code>Sprite2D</code>
+     *
+     * @param image Image for the sprite
+     */
+    public Sprite2D(BufferedImage image)
+    {
+        this.image = image;
+        
+        size = new Dimension(image.getWidth(),image.getHeight());
+        originalSize = new Dimension(size);
+        boundsRect.setRect(0,0,size.width,size.height);
+        //spriteCenter = new Point(size.width/2,size.height/2);
+        //location.setLocation(spriteCenter);
+        
+    }
+
+    /**Creates a new instance of <code>Sprite2D</code>
+     *
+     * @param fileName File/path to the image for the sprite
+     */
+    public Sprite2D(String fileName)
+    {
+        try{
+            image = ImageIO.read(this.getClass().getResource(fileName));
+            size = new Dimension(image.getWidth(),image.getHeight());
+            originalSize = new Dimension(size);
+            boundsRect.setRect(0,0,size.width,size.height);
+            //spriteCenter = new Point(size.width/2,size.height/2);
+            //location.setLocation(spriteCenter);
+        }catch(IOException e)
+        {
+            System.err.println("Cannot load image file "+fileName+" for Sprite2D. Exiting!");
+            System.exit(1);
+        }
+    }
+
+    /**Creates a new instance of <code>Sprite2D</code> based on a <code>Shape</code>
+     * 
+     * @param shape Shape for the sprite
+     * @param color Color of the shape's stroke
+     * @param thickness Thickness of the shape's stroke
+     */
+    public Sprite2D(Shape shape,Color color, int thickness)
+    {   
+        //System.out.println("Bounds of "+getClass().toString()+": "+shape.getBounds().toString());
+
+        image = new BufferedImage(shape.getBounds().width+2*thickness,shape.getBounds().height+2*thickness,BufferedImage.TRANSLUCENT);
+        Graphics2D g2 = image.createGraphics();
+        g2.setColor(color);
+
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setStroke(new BasicStroke(thickness));
+
+        g2.draw(shape);
+        size = new Dimension(shape.getBounds().width+thickness/2,shape.getBounds().height+thickness/2);
+        originalSize = new Dimension(size);
+        boundsRect.setRect(0,0,size.width,size.height);
+        //spriteCenter = new Point(size.width/2,size.height/2);
+    }
+    
+    /**Creates the sprite as a volatile image (currently, the voltile image is not being handled when the
+     * OS can't paint it).
+     */
+    public void createVolatileImage()
+    {
+        JComponent comp = painter.getComponent();
+
+        vImage = comp.createVolatileImage(size.width,size.height);
+ 
+        if (vImage == null) 
+        {
+            System.err.println("Volatile image null in "+getClass().toString()+". Make sure component is displayable.");
+            System.err.println("Exiting!");
+            System.exit(1);
+        
+        }
+        Graphics2D g2 = null;
+        
+        try
+        {
+            g2 = vImage.createGraphics();                  
+            
+            g2.setComposite(AlphaComposite.getInstance(AlphaComposite.CLEAR));
+            g2.setColor(new Color(0,0,0,0));
+            g2.fillRect(0, 0, size.width, size.height); 
+
+            g2.setComposite(AlphaComposite.SrcOver);
+
+            g2.drawImage(image,null,0,0);
+            
+            System.out.println("Created volatile image for "+this.getClass().toString());
+             
+        }
+        finally
+        {
+            g2.dispose();
+        }
+    }
+    /**Sets the image for the sprite
+     *
+     * @param image Image for the sprite
+     */
+    public void setImage(BufferedImage image)
+    {
+        this.image = image;
+        size.setSize(image.getWidth(),image.getHeight());
+        originalSize.setSize(size);
+        boundsRect.setRect(0,0,size.width,size.height);
+        //spriteCenter = new Point(size.width/2,size.height/2);
+    }
+    
+    public void setUseVolatileImage(Painter painter)
+    {
+        this.painter = painter;
+        spriteType = VOLATILE_IMAGE;
+    }
+
+    /**Sets the {@link Painter} to be used by this sprite. Painter must be set in order to perform scaling
+     * and screen wrap
+     * @param painter <code>Painter</code>
+     */
+    public void setPainter(Painter painter)
+    {
+        this.painter = painter;
+    }
+
+    /**Sets the location of the sprite in the panel (coordinates are center of sprite)
+     *
+     * @param x x position of the sprite
+     * @param y y position of the sprite
+     */
+    public void setLocation(int x, int y)
+    {
+        //updated = false;
+        location.setLocation(x,y);        
+    }
+
+    /**Sets the location of the sprite in the panel (coordinates are center of sprite)
+     *
+     * @param point Location of the sprite
+     */
+    public void setLocation(Point point)
+    {
+        //updated = false;
+        setLocation(point.x,point.y);
+    }
+
+    /**Moves the sprite the specified amount
+     *
+     * @param x Amount to move along the x dimension
+     * @param y Amount to move along the y dimension
+     */
+    public void move(int x, int y)
+    {
+        this.location.x = this.location.x + x;
+        this.location.y = this.location.y + y;
+    }
+
+    /**Radial move. Moves the sprite the specified distance in the specified direction.
+     *
+     * @param theta Angle/direction of movement (in radians)
+     * @param distance Distance to move
+     */
+    public void move(double theta, int distance)
+    {
+        this.location.x = this.location.x + (int)Math.round(Math.cos(theta-Math.PI/2) * distance);
+        this.location.y = this.location.y + (int)Math.round(Math.sin(theta-Math.PI/2) * distance);
+    }
+
+    /**Sets the rotation of the sprite
+     *
+     * @param theta rotation of the sprite (in radians)
+     */
+    public void setRotation(double theta)
+    {
+        this.theta = theta;
+    }
+
+    /**Returns the rotation of the sprite
+     *
+     * @return rotation of the sprite (in radians)
+     */
+    public double getRotation()
+    {
+        return theta;
+    }
+
+    /**Rotates the sprite the specified amount (in radians)
+     *
+     * @param theta amount to rotate (in radians)
+     */
+    public void rotate(double theta)
+    {
+        this.theta += theta;
+        
+        //check for wraparound
+        if (this.theta > 2*Math.PI)
+            this.theta = this.theta - 2*Math.PI;
+        
+        else if (this.theta < 0)
+            this.theta = 2*Math.PI + this.theta;
+    }
+
+    /**Returns the location of the sprite
+     *
+     * @return Location of the sprite
+     */
+    public Point getLocation()
+    {
+        return(location);
+    }
+
+    /**Sets the scale of the sprite
+     *
+     * @param scale scale of the sprite (scalar)
+     */
+    public void setScale(double scale)
+    {
+        /*if (painter == null)
+        {
+            System.err.println(this.getClass().getName()+": Cannot scale because container Painter has not been specified (setPainter())");
+            return;
+        }*/
+
+        this.scale = scale;
+        this.size.setSize(originalSize.getWidth()*scale, originalSize.getHeight()*scale);
+        /*double oldWidth = size.getWidth();
+        double oldHeight = size.getHeight();
+
+        
+
+        //this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+
+        double widthDiff = (size.getWidth() - oldWidth)/2.0d;
+        double heightDiff = (size.getHeight() - oldHeight)/2.0d;
+
+        location.setLocation(location.getX()-widthDiff,location.getY()-heightDiff);
+        
+        toScale = true;*/
+
+    }
+
+
+    /**Sets the size of the sprite. NOTE: Because there is currently only one scaling factor (used for both
+     * x and y so the aspect ratio of scaling is always the same), you only need to specify width here.
+     *
+     * @param width Desired width of sprite (height will be scaled accordingly).
+     */
+    public void setSize(int width)
+    {
+        float scale = (float)width/(float)originalSize.width;
+        setScale(scale);
+    }
+
+    /**Returns the scale of the sprite
+     *
+     * @return scale of the sprite (scalar)
+     */
+    public double getScale()
+    {
+        return scale;
+    }
+
+    /**Scales the sprite the specified amount
+     *
+     * @param ratio amount to scale (scalar)
+     */
+    public void scale(double ratio)
+    {
+        /*if (painter == null)
+        {
+            System.err.println(this.getClass().getName()+": Cannot scale because container Painter has not been specified (setPainter())");
+            return;
+        }*/
+
+        this.scale *= ratio;
+        this.size.setSize(originalSize.getWidth()*scale, originalSize.getHeight()*scale);
+        /*double oldWidth = size.getWidth();
+        double oldHeight = size.getHeight();
+
+        this.size.setSize(originalSize.getWidth()*scale, originalSize.getHeight()*scale);
+
+        this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+
+        double widthDiff = (size.getWidth() - oldWidth)/2.0d;
+        double heightDiff = (size.getHeight() - oldHeight)/2.0d;
+
+        //location.setLocation(location.getX()-widthDiff,location.getY()-heightDiff);
+        
+        toScale = true;*/
+    }
+
+    /**True if bilinear interpolation is being used.
+     *
+     * @return True if to be interpolated
+     */
+    public void setBilinearInterpolation(boolean b)
+    {
+        this.antiAlias = b;
+    }
+
+    /**True if bilinear interpolation is being used.
+     *
+     * @return True if interpolated
+     */
+    public boolean isBilinearInterpolation()
+    {
+        return antiAlias;
+    }
+
+    /**Returns the size of the sprite
+     *
+     * @return size of the sprite
+     */
+    public Dimension getSize()
+    {
+        return size;
+    }
+    
+    /**Returns the rectangular collsion bounds for this sprite
+     * 
+     * @return Shape object
+     */
+    public Shape getCollisionBounds()
+    {
+        return transformedRect;
+    }
+    
+    /**Returns <code>true</code> if this sprite collides with <code>otherSprite</code>
+     * 
+     * @param otherSprite Other sprite being checked for collision
+     * @return True if sprites have collided
+     */
+    public boolean collidesWith(Sprite2D otherSprite)
+    {
+
+        if (transformedRect != null && otherSprite.isVisible() && otherSprite.getCollisionBounds() != null/*&& updated*/){
+            return (isVisible && transformedRect.intersects(otherSprite.getCollisionBounds().getBounds()));
+        }
+        else return false;
+    }
+
+    /**Returns <code>true</code> if this sprite collides with <code>otherSprite</code>
+     *
+     * @param otherSprite Other sprite being checked for collision
+     * @return True if sprites have collided
+     */
+    public boolean collidesWith(FlipBookSprite otherSprite)
+    {
+
+        if (transformedRect != null && otherSprite.isVisible()  && otherSprite.getCollisionBounds() != null/*&& updated*/)
+            return (isVisible && transformedRect.intersects(otherSprite.getCollisionBounds().getBounds()));
+        else return false;
+    }
+    
+    /**Used for diagnostics. If <code>true</code>, draws an orange rectangle to outline the 
+     * bounds used for collision detection.
+     * @param draw True if collision detection bounds are to be drawn.
+     */
+    public void setBoundsVisible(boolean draw)
+    {
+        this.drawBounds = draw;
+    }
+    
+    /**Returns whether the orange rectangle outline collision bounds is being 
+     * drawn for diagnostic purposes.
+     * @return draw True if collision detection bounds are to be drawn.
+     */
+    public boolean boundsVisible()
+    {
+        return drawBounds;
+    }
+
+    /**Set to true if the sprite is visible
+     *
+     * @param visible true if the sprite is visible
+     */
+    public void setVisible(boolean visible)
+    {
+        this.isVisible = visible;
+    }
+
+    /**Returns true if the sprite is visible
+     *
+     * @return true if the sprite is visible
+     */
+    public boolean isVisible()
+    {
+        return isVisible;
+    }
+
+    /**Sets the screen wrap (wraps horizontally and vertically if <code>wrap</code> is true
+     *
+     * @param wrap Set to true to turn on screen wrap
+     * @param painter {@link Painter}
+     */
+    public void setScreenWrap(boolean wrap,Painter painter)
+    {
+        this.screenWrap = wrap;
+        
+        /*if (this.comp == null)*/ this.painter = painter;
+        //System.out.println("Comp width: "+comp.getSize().width);
+    }
+    
+    private void screenWrap()
+    {
+        Dimension pSize = painter.getSize();
+
+        //goes off left side of screen
+        if (getLocation().x < -getSize().width/2)
+        {           
+            setLocation(pSize.width + getSize().width/2,getLocation().y);
+        }
+        
+        //goes off right side
+        else if (getLocation().x - getSize().width/2 > pSize.width)
+        {
+            setLocation(-getSize().width/2,getLocation().y);
+        }
+        
+        //goes off top of screen
+        if (getLocation().y < -getSize().height/2)
+        {
+            setLocation(getLocation().x,pSize.height+getSize().height/2);
+        }
+        
+        //goes off bottom
+        else if (getLocation().y - getSize().height/2 > pSize.height)
+        {
+            setLocation(getLocation().x,-getSize().height/2);
+        }
+    }
+
+    /**Returns true if the sprite is off the paint surface.
+     *
+     * @param painter The {@link Painter}
+     * @return True if offscreen
+     */
+    public boolean isOffscreen(Painter painter)
+    {
+        boolean returnBool = false;
+
+        Dimension compSize = painter.getSize();
+
+        if ((location.x < 0) ||
+                (location.x > compSize.width) ||
+                (location.y < 0) ||
+                (location.y > compSize.height))
+        {
+            returnBool = true;
+        }
+        return returnBool;
+    }
+
+    /**Returns true if the sprite is off the paint surface.
+     * @return True if offscreen
+     */
+    public boolean isOffscreen()
+    {
+        if (this.painter == null)
+        {
+            System.err.println(this.getClass().getName()+": Cannot return accurate isOffscreen() because container Painter has not been specified (setPainter())");
+            return false;
+        }
+
+        boolean returnBool = false;
+
+        Dimension compSize = painter.getSize();
+
+        if ((location.x+size.width < 0) ||
+                (location.x > compSize.width) ||
+                (location.y+size.height < 0) ||
+                (location.y > compSize.height))
+        {
+            returnBool = true;
+        }
+        return returnBool;
+
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void paintObject(Graphics g)
+    {
+        if (isVisible)
+        {
+            Graphics2D g2 = (Graphics2D)g;
+
+            //g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            if (spriteType == VOLATILE_IMAGE && vImage == null)
+            {
+                createVolatileImage();
+            }           
+            
+            if (spriteType == VOLATILE_IMAGE)
+            {
+                Graphics2D vg2 = (Graphics2D)vImage.getGraphics();
+                
+                vg2.setComposite(AlphaComposite.getInstance(AlphaComposite.CLEAR));
+                vg2.setColor(new Color(0,0,0,0));
+            
+                vg2.fillRect(0, 0, size.width, size.height);
+                           
+                vg2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC));
+                
+                vg2.drawImage(image,null,0,0);
+                g2.drawImage(vImage,transform,null);
+            }
+            else if (spriteType == IMAGE)
+            {
+                if (antiAlias) g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);          
+                g2.drawImage(image, transform, null);
+                if (antiAlias) g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            }
+            
+            if (drawBounds)
+            {
+                g2.setColor(Color.ORANGE);
+                g2.draw(transformedRect);
+            }
+        }
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void update(float interpolation)
+    {               
+        updateState(interpolation);
+        
+        if (screenWrap)
+        {
+            screenWrap();
+        }     
+
+        //transform = new AffineTransform();
+        transform.setToIdentity();
+        transform.translate(location.getX(), location.getY());
+        transform.scale(scale, scale);
+        transform.rotate(theta);
+
+        transform.translate(-originalSize.getWidth()/2, -originalSize.getHeight()/2);
+        
+        //this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+        
+        /*transform.setToTranslation(location.getX(), location.getY());
+
+        //TODO: Need to optimize: need to change transform instead of resetting it each time
+
+        transform.rotate(theta, spriteCenter.x, spriteCenter.y);
+
+        //if (toScale)
+        if (scale != 1.0)
+        {
+            Dimension compSize = painter.getSize();
+
+            transform.translate((compSize.width/2-spriteCenter.getX()-location.getX()), (compSize.height/2-spriteCenter.getY()-location.getY()));
+            transform.scale(scale, scale);
+            transform.translate((-compSize.width/2+spriteCenter.getX()+location.getX())/scale, (-compSize.height/2+spriteCenter.getY()+location.getY())/scale);
+            //transform.translate(-compSize.width/2+spriteCenter.getX()+location.getX(), -compSize.height/2+spriteCenter.getY()+location.getY());
+            this.spriteCenter.setLocation(size.getWidth()/2d,size.getHeight()/2d);
+            toScale = false;
+
+            //transform.translate(location.x,location.y);
+        }*/
+
+        //TODO: This needs optimization: A new is Shape object is created here.
+        transformedRect = transform.createTransformedShape(boundsRect);
+        
+        //updated = true;
+    }
+
+    /**Override to specify custom state updates
+     *
+     * @param interpolation Amount of time (in secs) since last update
+     */
+    public void updateState(float interpolation){}
+
+    
+    public static void main(String[] args)
+    {
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,800,600,false);
+        GamePainter painter = (GamePainter)frame.getPainter();
+
+        final Sprite2D sprite = new Sprite2D("/images/Asteroid_medium.gif"){
+            public void updateState(float interpolation)
+            {
+                Dimension oldSize = new Dimension(getSize());
+                scale(1 + .3*interpolation);
+                rotate(Math.PI*interpolation);
+            }
+        };
+        
+
+        sprite.setLocation(painter.getSize().width/2,painter.getSize().height/2);
+        painter.addToPaintList(sprite);
+        sprite.setBoundsVisible(true);
+    }
+}

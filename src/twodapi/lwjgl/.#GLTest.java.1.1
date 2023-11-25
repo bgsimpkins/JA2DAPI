@@ -1,0 +1,75 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import org.lwjgl.input.Keyboard;
+
+/**
+ *
+ * @author ben
+ */
+public class GLTest extends GLPainter
+{
+    GLPainter painter;
+
+    SpriteGL asteroid,ship;
+
+    public GLTest()
+    {
+
+        super(800,600);
+    }
+
+    @Override
+    protected void gameInit()
+    {
+        setBackground("/images/purple-galaxy-stars.jpg");
+
+        asteroid = new SpriteGL("/images/Asteroid.gif");
+        asteroid.setScreenWrap(true, this);
+        this.addToPaintList(asteroid,1);
+
+        ship = new SpriteGL("/images/ship.gif");
+        ship.setLocation(400, 300);
+        ship.setScale(.7f, .7f);
+        ship.setScreenWrap(true, this);
+        this.addToPaintList(ship);
+    }
+
+    @Override
+    public void gameUpdate(float interpolation)
+    {
+
+        asteroid.moveRadial(45,interpolation*100);
+        asteroid.rotate(interpolation*180);
+
+        if (Keyboard.isKeyDown(Keyboard.KEY_RIGHT))
+        {
+            ship.rotate(interpolation*450);
+        }
+        else if (Keyboard.isKeyDown(Keyboard.KEY_LEFT))
+        {
+            ship.rotate(-interpolation*450);
+        }
+
+        if (Keyboard.isKeyDown(Keyboard.KEY_UP))
+        {
+            ship.moveRadial(ship.getRotation()-90, interpolation*200);
+        }
+
+        if (ship.collidesWith(asteroid))
+        {
+            ship.setDrawBounds(true);
+        }
+        else ship.setDrawBounds(false);
+
+    }
+
+    public static void main(String[] args)
+    {
+        new GLTest();
+    }
+}

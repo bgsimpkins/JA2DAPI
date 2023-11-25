@@ -1,0 +1,112 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.lwjgl;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import org.lwjgl.input.Controller;
+import org.lwjgl.LWJGLException;
+import org.lwjgl.input.Controllers;
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class GameController
+{
+    //for quick lookup of button indices
+    private ArrayList<HashMap<String,Integer>> buttonList;
+
+    public GameController()
+    {
+        if (!Controllers.isCreated()) try {
+            Controllers.create();
+
+            initButtonList();
+
+        } catch (LWJGLException ex)
+        {
+            System.err.println("GameController: Could not create Controllers!");
+            ex.printStackTrace();
+        }
+    }
+
+    private void initButtonList()
+    {
+        buttonList = new ArrayList();
+
+        for (int i = 0; i < Controllers.getControllerCount(); i++)
+        {
+            HashMap<String,Integer> buttonMap = new HashMap();
+            Controller c = Controllers.getController(i);
+            for (int j = 0; j < c.getButtonCount(); j++)
+            {
+                String buttonName = c.getButtonName(j);
+                buttonMap.put(buttonName,j);
+            }
+            buttonList.add(buttonMap);
+        }
+    }
+
+    public boolean isPressed(int controller, String buttonName)
+    {
+        int buttonI = buttonList.get(controller).get(buttonName);
+        return Controllers.getController(controller).isButtonPressed(buttonI);
+    }
+
+    public boolean isPressed(int controller, int buttonIndex)
+    {
+        return Controllers.getController(controller).isButtonPressed(buttonIndex);
+    }
+
+    public int getNumButtons(int controller)
+    {
+        return Controllers.getController(controller).getButtonCount();
+    }
+
+    public String getButtonName(int controller,int buttonIndex)
+    {
+        return Controllers.getController(controller).getButtonName(buttonIndex);
+    }
+
+    public Controller getController(int index)
+    {
+        return Controllers.getController(index);
+    }
+
+    public String getControllerName(int index)
+    {
+        return Controllers.getController(index).getName();
+    }
+
+    public int getNumControllers()
+    {
+        return Controllers.getControllerCount();
+    }
+
+    public int getNumAxes(int controller)
+    {
+        return Controllers.getController(controller).getAxisCount();
+    }
+
+    public static void main(String[] args)
+    {
+        GameController gc = new GameController();
+        Controller c= gc.getController(0);
+        System.out.println("\n*************Controller="+c.getName());
+        System.out.println("Num axes="+c.getAxisCount());
+        for (int i = 0; i < c.getButtonCount(); i++)
+        {
+            String name = c.getButtonName(i);
+            System.out.println("Button "+i+"="+name);
+        }
+    }
+
+    class ControllerMonitor
+    {
+        public ControllerMonitor(){}
+    }
+}

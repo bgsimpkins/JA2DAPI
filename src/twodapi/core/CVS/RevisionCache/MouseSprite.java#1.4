@@ -1,0 +1,443 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.core;
+
+import java.awt.Dimension;
+import java.awt.Point;
+import java.awt.Shape;
+import java.awt.Color;
+
+import java.awt.image.BufferedImage;
+
+import javax.swing.JPanel;
+import javax.swing.JFrame;
+
+/**An extesion of {@link Sprite2D} intended for sprites that require mouse interaction. There is detection of mouse clicks, releases,
+ * and mouse entry/exit of the sprite bounds as well as methods than can be overriden to catch these events. States are also
+ * tracked internally (e.g., wheter the mouse is over the sprite or if the sprite is being dragged), which may be more relevant
+ * in a game animation framework.
+ *
+ * NOTE: The class needs a {@link MouseSprite} object to function.
+ * 
+ *
+ * @author bsimpkins
+ */
+public class MouseSprite extends Sprite2D
+{
+    /**A capability that will make the sprite draggable if clicked on. Use <code>addCapability()</code> to add*/
+    public static final int DRAGGABLE = 1;
+
+    /**A capability that will allow for mouse over state to be tracked and associated events fired (mouseEntered() and
+     * mouseExited()).
+     */
+    public static final int MOUSE_OVERABLE = 2;
+
+    protected boolean draggable = false;
+
+    private boolean readyToDrag = false;
+
+    protected boolean mouseOverable = false;
+
+    protected boolean mousePressed = false;
+
+    protected boolean mouseInSprite = false;
+
+    private Point anchorPoint = new Point();
+
+    private Point mousePoint = new Point();
+
+    private boolean checkMouseEntered = false;
+
+    /**Creates a new instance of <code>MouseSprite</code>
+     *
+     * @param image The sprite image
+     * @param mouseControls The <code>MouseControls</code> object
+     */
+    public MouseSprite(BufferedImage image, MouseControls mouseControls)
+    {
+        super(image);
+
+        mouseControls.addMouseable(new MouseSpriteListener(this));
+    }
+
+    /**Creates a new instance of <code>MouseSprite</code>
+     *
+     * @param filename Path/filename of the the sprite image.
+     * @param mouseControls The <code>MouseControls</code> object
+     */
+    public MouseSprite(String filename, MouseControls mouseControls)
+    {
+        super(filename);
+        mouseControls.addMouseable(new MouseSpriteListener(this));
+    }
+
+    /**Creates a new instance of <code>MouseSprite</code>
+     *
+     * @param shape A <code>Shape</code> object to use for the sprite image
+     * @param color Color of the outline of the shape
+     * @param thickness Thickness of the stroke of the shape
+     * @param mouseControls The <code>MouseControls</code> object
+     */
+    public MouseSprite (Shape shape, Color color, int thickness, MouseControls mouseControls)
+    {
+        super(shape,color,thickness);
+        mouseControls.addMouseable(new MouseSpriteListener(this));
+    }
+
+    /**Adds a capaiblity to the sprite (e.g, <code>DRAGGABLE</code> or <code>MOUSE_OVERABLE</code>
+     *
+     * @param capability Capability to add
+     */
+    public void addCapability(int capability)
+    {
+        switch(capability)
+        {
+            case DRAGGABLE:
+            {
+                draggable = true;
+                break;
+            }
+            case MOUSE_OVERABLE:
+            {
+                mouseOverable = true;
+                break;
+            }
+            default: System.err.println("Capability "+capability+" not a capbility of " +
+                    "class MouseSprite. Capability not added. Please use MouseSprite capability" +
+                    "constants");
+        }
+    }
+
+    /*@Override
+    public void setPainter(Painter painter)
+    {
+        this.painter = painter;
+
+        SpriteMouseListener sml = new SpriteMouseListener(this);
+
+
+        JComponent comp = painter.getComponent();
+
+        comp.addMouseListener(sml);
+        comp.addMouseMotionListener(sml);
+    }*/
+
+    /**Returns true if the mouse is pressed
+     * @return True if mouse Pressed
+     */
+    public boolean isMousePressed() {
+        return mousePressed;
+    }
+
+    /**Returns true if the mouse is in sprite
+     * (only works if MOUSE_OVERABLE capability is active
+     *
+     * @return True if mouse in in Sprite
+     */
+    public boolean isMouseInSprite() {
+        
+        if (mouseOverable)
+            return mouseInSprite;
+        else return (getCollisionBounds() != null && getCollisionBounds().contains(mousePoint.getX(), mousePoint.getY()));
+    }
+
+    /**Returns true if the MOUSE_OVERABLE capability is active
+     *
+     * @return true if the sprite is mouse overable
+     */
+    public boolean isMouseOverable()
+    {
+        return mouseOverable;
+    }
+
+    /**Sets the MOUSE_OVERABLE capability to active or not
+     *
+     * @param overable true if the sprite is mouse overable
+     */
+    public void setMouseOverable(boolean overable)
+    {
+        this.mouseOverable = overable;
+    }
+
+    /**Returns true if the sprite is DRAGGABLE
+     * @return true if draggable
+     */
+    public boolean isDraggable() {
+        return draggable;
+    }
+
+    /**Sets the DRAGGABLE capability to active or not
+     * @param draggable true if the sprite is draggable
+     */
+    public void setDraggable(boolean draggable) {
+        this.draggable = draggable;
+    }
+
+    /**Returns true if the sprite is currently being dragged
+     *
+     * @return true if the sprite is currently being dragged
+     */
+    public boolean isDragging()
+    {
+        return this.readyToDrag;
+    }
+
+    /**If a mouse button is pressed, this event is fired.
+     *
+     * @param mouseX xPos of mouse pointer
+      * @param mouseY yPos of mouse ponter
+     */
+    public void mousePressed(int mouseX, int mouseY, int button){}
+
+    /**If a mouse button is released, this event is fired.
+     *
+     * @param mouseX xPos of mouse pointer
+      * @param mouseY yPos of mouse ponter
+     */
+    public void mouseReleased(int mouseX, int mouseY, int button){}
+
+    /**This event is fired if the mouse enters the collision bounds of the sprite.
+     * Override this function to receive the event. NOTE: This event is only fired
+     * if the MOUSE_OVERABLE capability is on.
+     * @param mouseX X pos of mouse
+     * @param mouseY Y pos of mouse
+     */
+    public void mouseEntered(int mouseX, int mouseY){}
+
+    /**This event is fired if the mouse exits the collision bounds of the sprite. NOTE: This
+     * Override this function to receive the event. NOTE: This event is only fired
+     * if the MOUSE_OVERABLE capability is on.
+     * @param mouseX X pos of mouse
+     * @param mouseY Y pos of mouse
+     */
+    public void mouseExited(int mouseX, int mouseY){}
+
+    /**This event is fired if the mouse is moved
+     *
+     * @param mouseX X pos of mouse
+     * @param mouseY Y pos of mouse
+     * @param buttonDown true if button is down
+     */
+    public void mouseMoved(int mouseX, int mouseY, boolean buttonDown){}
+
+    @Override
+    public void updateState(float interpolation)
+    {
+        /*if (!mouseOverable) return;
+
+        //if mouse is in sprite bounds
+        if (checkMouseEntered)
+        {
+            if (getCollisionBounds() != null && getCollisionBounds().contains(mousePoint.x, mousePoint.y))
+                {
+                    //if mouse was previously out of bounds, fire mouseEntered event
+                    if (!mouseInSprite)
+                    {
+                        mouseInSprite = true;
+                        mouseEntered(mousePoint.x, mousePoint.y);
+                    }
+
+                }
+                //else, if mouse is not in bounds but previously was, fire mouseExited event
+                else if (mouseInSprite)
+                {
+                    mouseInSprite = false;
+                    mouseExited(mousePoint.x, mousePoint.y);
+                }
+
+            checkMouseEntered = false;
+        }*/
+
+        
+
+    }
+
+    //old Listener that uses AWT MouseListeners
+    /*class SpriteMouseListener implements MouseListener, MouseMotionListener
+    {
+        private MouseSprite mouseSprite;
+
+        public SpriteMouseListener(MouseSprite mouseSprite)
+        {
+            this.mouseSprite = mouseSprite;
+        }
+
+        public void mouseEntered(MouseEvent e){}
+        public void mouseExited(MouseEvent e){}
+
+        public void mousePressed(MouseEvent e)
+        {
+            mousePressed = true;
+            
+            if (mouseSprite.isDraggable() && mouseSprite.getCollisionBounds().contains(e.getX(), e.getY())) {
+                mouseSprite.readyToDrag = true;
+                anchorPoint.setLocation(e.getX()-mouseSprite.getLocation().x, e.getY()-mouseSprite.getLocation().y);
+            }
+
+            mouseSprite.mousePressed(e.getX(), e.getY(),e.getButton());
+        }
+        public void mouseReleased(MouseEvent e)
+        {
+            mousePressed = false;
+
+            if (mouseSprite.isDraggable()) readyToDrag = false;
+
+            mouseSprite.mouseReleased(e.getX(), e.getY(),e.getButton());
+            
+        }
+        public void mouseClicked(MouseEvent e){}
+
+        public void mouseMoved(MouseEvent e)
+        {
+            mousePoint = e.getPoint();
+
+            if (mouseSprite.isMouseOverable())
+            {
+                checkMouseEntered = true;
+            }
+            mouseSprite.mouseMoved(e.getX(), e.getY(), false);
+        }
+
+        public void mouseDragged(MouseEvent e)
+        {
+            mousePoint = e.getPoint();
+
+            if (mouseSprite.isDraggable() && mouseSprite.readyToDrag)
+            {
+                //move sprite
+                mouseSprite.setLocation(e.getX() - anchorPoint.x,
+                        e.getY() - anchorPoint.y);
+            }
+
+            if (mouseSprite.isMouseOverable())
+            {
+               checkMouseEntered = true;
+            }
+            mouseSprite.mouseMoved(e.getX(), e.getY(), true);
+        }
+    }*/
+
+    class MouseSpriteListener implements Mouseable
+    {
+
+        private MouseSprite mouseSprite;
+
+        public MouseSpriteListener(MouseSprite mouseSprite)
+        {
+            this.mouseSprite = mouseSprite;
+        }
+
+        public Point getLocation() {
+ 
+            return mouseSprite.getLocation();
+        }
+
+        public Dimension getSize() {return size;}
+
+        public void mouseButtonUpdate(Point mousePoint, int button, boolean pressed)
+        {
+            mousePressed = pressed;
+
+            if (mouseSprite.isDraggable() && mouseSprite.getCollisionBounds().contains(mousePoint.getX(), mousePoint.getY())) {
+                readyToDrag = true;
+                anchorPoint.setLocation(mousePoint.getX()-mouseSprite.getLocation().x, mousePoint.getY()-mouseSprite.getLocation().y);
+            }
+
+            if (pressed) mouseSprite.mousePressed(mousePoint.x, mousePoint.y,button);
+            else
+            {
+                if (mouseSprite.isDraggable()) readyToDrag = false;
+                mouseSprite.mouseReleased(mousePoint.x, mousePoint.y,button);
+            }
+        }
+
+        public void mouseMoveUpdate(Point mousePoint, int button, boolean pressed)
+        {
+            mouseSprite.mousePoint = mousePoint;
+
+            mouseSprite.mouseMoved(mousePoint.x,mousePoint.y,pressed);
+
+            if (pressed)
+            {
+                if (mouseSprite.isDraggable() && mouseSprite.readyToDrag)
+                {
+                    //move sprite
+                    mouseSprite.setLocation(mousePoint.x - anchorPoint.x,
+                            mousePoint.y - anchorPoint.y);
+                }
+            }
+
+        }
+
+        public void mouseBorderUpdate(Point mousePoint, boolean entered)
+        {
+            if (!mouseOverable) return;
+
+            if (entered)
+            {
+                mouseInSprite = true;
+                mouseSprite.mouseEntered(mousePoint.x,mousePoint.y);
+            }
+            else
+            {
+                mouseInSprite = false;
+                mouseSprite.mouseExited(mousePoint.x,mousePoint.y);
+            }
+        }
+
+    }
+
+    public static void main(String[] args)
+    {
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        JPanel panel = new JPanel();
+
+        GamePainter painter = new GamePainter(panel);
+        MouseControls mControls = new MouseControls(painter);
+
+        MouseSprite mouseSprite = new MouseSprite("/images/ship.gif",mControls){
+            @Override
+            public void mouseEntered(int x, int y){
+                System.out.println("Mouse entered");
+            }
+            @Override
+            public void mouseExited(int x, int y){
+                System.out.println("Mouse exited");
+            }
+            @Override
+            public void mousePressed(int x, int y,int butt)
+            {
+                System.out.println("Pressed");
+            }
+            @Override
+            public void mouseReleased(int x, int y, int butt)
+            {
+                System.out.println("Released");
+            }
+
+            /*public void mouseReleased(int x,int y)
+            {
+                System.out.println("Mouse over? "+isMouseInSprite());
+            }*/
+
+
+        };
+        //mouseSprite.setPainter(painter);
+        mouseSprite.setDraggable(true);
+        mouseSprite.setMouseOverable(true);
+        mouseSprite.setBoundsVisible(true);
+
+        painter.addToPaintList(mouseSprite);
+
+        frame.add(panel);
+
+        frame.setSize(800,600);
+
+        frame.setVisible(true);
+    }
+}

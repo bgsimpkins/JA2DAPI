@@ -1,0 +1,181 @@
+/*
+ * GameTest.java
+ *
+ * Created on August 3, 2009, 10:49 PM
+ *
+ * To change this template, choose Tools | Template Manager
+ * and open the template in the editor.
+ */
+
+package GameTest;
+
+import java.awt.Color;
+import java.awt.Graphics;
+
+import twodapi.core.Frame2D;
+import twodapi.core.GamePainter;
+import twodapi.core.Paintable;
+import twodapi.core.Painter;
+
+
+/**
+ *
+ * @author bsimpkins
+ */
+public class GameTest implements Paintable
+{
+    private GamePainter painter;
+
+    private ShipSprite ship;
+
+    private AsteroidSprite[] asteroids = new AsteroidSprite[3];
+
+    private Blast[] blasts = new Blast[5];
+
+    private Explosion[] explosions = new Explosion[8];
+
+    private int lives = 3;
+
+    public GameTest()
+    {
+
+        Frame2D frame = new Frame2D(Frame2D.REG_PAINTER,1024,768);
+
+        painter = (GamePainter)frame.getPainter();
+        painter.setFrameRate(30);
+
+        initAsteroids(painter);
+        initBlasts(painter);
+        initExplosions(painter);
+
+        ship = new ShipSprite(painter,blasts,this);  
+
+        //ship.setVisible(false);
+
+        painter.addToPaintList(this,1);
+        painter.addToPaintList(ship,2);
+        
+        painter.setBackground(Color.BLACK);
+        ship.temporarilyHide();
+    }
+
+    private void initAsteroids(GamePainter painter)
+    {
+        for (int i = 0; i < asteroids.length; i++)
+        {
+            asteroids[i] = new AsteroidSprite(this);
+
+            asteroids[i].setScreenWrap(true, painter);
+
+            //set location randomly
+            int x = (int)(Math.random()*painter.getComponent().getSize().width);
+            int y = (int)(Math.random()*painter.getComponent().getSize().height);
+
+            asteroids[i].setLocation(x, y);
+
+            painter.addToPaintList(asteroids[i],2);
+        }
+    }
+
+    public AsteroidSprite[] getAsteroids()
+    {
+        return asteroids;
+    }
+
+    public void showExplosion(int x, int y)
+    {
+        Explosion expl = null;
+
+        for (int i = 0; i < explosions.length; i++)
+        {
+            if (!explosions[i].isVisible())
+            {
+                expl = explosions[i];
+                break;
+            }
+        }
+
+        if (expl != null)
+        {
+            expl.setLocation(x, y);
+            expl.update(0);
+            expl.setVisible(true);
+            expl.animateOnce();
+
+        }
+        else
+        {
+            System.out.println("Warning: Couldn't get an explosion from the queue to show!");
+        }
+    }
+
+    private void initBlasts(Painter painter)
+    {
+        for (int i = 0; i < blasts.length; i++)
+        {
+            blasts[i] = new Blast(20,painter);
+            blasts[i].setVisible(false);
+
+            painter.addToPaintList(blasts[i],2);
+        }
+    }
+
+    private void initExplosions(GamePainter painter)
+    {
+        for (int i = 0; i < explosions.length; i++)
+        {
+            explosions[i] = new Explosion(painter);
+            painter.addToPaintList(explosions[i],1);
+        }
+    }
+
+    public void update(float interpolation)
+    {
+        //check for ship/asteroid collisions
+        if ( ship.isVisible())
+        {
+            for (int i = 0; i < asteroids.length; i++)
+            {
+                if (asteroids[i].isVisible() && ship.collidesWith(asteroids[i]))
+                {
+                    ship.explode();
+                }
+
+                //check for blast/asteroid collisions
+                for (int j = 0; j < blasts.length; j++)
+                {
+                    if (blasts[j].isVisible() && blasts[j].collidesWith(asteroids[i]))
+                    {
+                        asteroids[i].explode();
+                        blasts[j].setVisible(false);
+                    }
+                }
+            }
+        }    
+    }
+
+    public GamePainter getPainter()
+    {
+        return painter;
+    }
+
+    public int getNumLives()
+    {
+        return lives;
+    }
+
+    public void removeLife()
+    {
+        lives--;
+    }
+
+    public void paintObject(Graphics g)
+    {}
+
+    public static void main(String[] args)
+    {
+        GameTest gameTest = new GameTest();
+
+
+    }
+}

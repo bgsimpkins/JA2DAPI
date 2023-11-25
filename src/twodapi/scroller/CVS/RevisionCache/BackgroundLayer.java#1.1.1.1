@@ -1,0 +1,197 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+package twodapi.scroller;
+
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import twodapi.core.KeyControls;
+import twodapi.core.Paintable;
+import twodapi.core.GamePainter;
+
+/**A simple background layer for a side scroller that efficiently wraps an image horizontally around the screen
+ * and allows it to be scrolled left and right.
+ *
+ * @author bsimpkins
+ */
+public class BackgroundLayer implements Paintable
+{
+    private BufferedImage image;
+
+    private float scroll = 0;
+
+    private float toScroll = 0;
+
+    private int yLoc = 0;
+
+    private JComponent comp;
+
+    /**For diagnostics. The number of images drawn at any given time*/
+    protected int imageNum = 0;
+
+    /**Creates a new background layer.
+     *
+     * @param file The filename of the image to be the background.
+     * @param comp The component on which the background will be painted.
+     */
+    public BackgroundLayer(String file, JComponent comp)
+    {
+        this.comp = comp;
+
+        try {
+            image = ImageIO.read(this.getClass().getResource(file));
+        } catch (IOException ex) 
+        {
+            System.err.println("BackgroundLayer: Could not load background image "+file);
+        }
+    }
+
+    /**Scrolls the background the specified number of pixels
+     *
+     * @param toScroll The number of pixels to scroll
+     */
+    public void scroll(float toScroll)
+    {
+        this.toScroll = toScroll;
+    }
+
+    /**Sets the vertical position of the background image. The default is 0 (top of screen).
+     *
+     * @param yLoc Vertical position of background (origin=top).
+     */
+    public void setYLocation(int yLoc)
+    {
+        this.yLoc = yLoc;
+    }
+
+    /**Returns the vertical position of the background image. The default is 0 (top of screen).
+     *
+     * @return yLoc Vertical position of background (origin=top).
+     */
+    public int getYLocation()
+    {
+        return yLoc;
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void update(float interpolation)
+    {
+        if (toScroll != 0)
+        {
+            setScroll(getScroll() + toScroll);
+            toScroll = 0;
+        }
+
+        //Wrap scroll location. Works in correspondence with image wrap optimization in <code>paintObject()</code>.
+        if (getScroll() >= image.getWidth()) setScroll(getScroll() - image.getWidth());
+        else if (getScroll() <= -image.getWidth()) setScroll(getScroll() + image.getWidth());
+
+
+    }
+
+    /**Override of the {@link Paintable} method. Do not call directly*/
+    public void paintObject(Graphics g)
+    {
+        Graphics2D g2 = (Graphics2D) g;
+        //g2.drawImage(image, (int)Math.round(-scroll),yLoc, null);
+
+        imageNum = 0;
+
+        //Wrap image when needed.
+        //Attempt to optimize: Only wrap to cover screen area
+        //TODO: This wrap optimization could use work. This is probably not optimal (See KillerGaveProgrammingforJava ch 12 for another idea).
+        int x = (int)Math.round(-getScroll());
+
+        //start at scroll point, work right and repeat image until off screen
+        for (; x < comp.getSize().width; x += image.getWidth())
+        {
+            g2.drawImage(image, (int)Math.round(x),yLoc, null);
+            imageNum++;
+        }
+
+        //start at scroll point, work left and repeat image until off screen
+        x = (int)Math.round(-getScroll());
+        for (; x > -image.getWidth(); x -= image.getWidth())
+        {
+            g2.drawImage(image, (int)Math.round(x),yLoc, null);
+            imageNum++;
+        }
+
+    }
+
+    public static void main(String[] args)
+    {
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(800,600);
+
+        JPanel panel = new JPanel();
+        GamePainter painter = new GamePainter(panel);
+
+        final KeyControls control = new KeyControls(panel);
+        control.set(KeyEvent.VK_RIGHT);
+        control.set(KeyEvent.VK_LEFT);
+
+        BackgroundLayer background = new BackgroundLayer("/images/houses.gif",panel)
+        {
+            @Override
+            public void update(float interpolation)
+            {
+
+                if (control.isPressed(KeyEvent.VK_RIGHT))
+                {
+                    this.scroll(3f);
+                }
+                else if (control.isPressed(KeyEvent.VK_LEFT))
+                {
+                    this.scroll(-3f);
+                }
+
+                super.update(0);
+            }
+
+            @Override
+            public void paintObject(Graphics g)
+            {
+                super.paintObject(g);
+
+                g.setColor(Color.WHITE);
+                g.drawString("ImageNum="+this.imageNum,10,40);
+            }
+        };
+
+        background.setYLocation(50);
+
+        painter.addToPaintList(background);
+
+        frame.getContentPane().add(panel);
+
+        frame.setVisible(true);
+    }
+
+    /**Gets the scroll value
+     * @return the scroll
+     */
+    public float getScroll() {
+        return scroll;
+    }
+
+    /**Sets the scroll value
+     * @param scroll the scroll to set
+     */
+    public void setScroll(float scroll) {
+        this.scroll = scroll;
+    }
+
+}
