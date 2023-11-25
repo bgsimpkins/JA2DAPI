@@ -144,7 +144,7 @@ public class KeyControlsGL
 //            }
             processKeyEvent(keyCode,pressed);
         }
-        System.out.println("_________");
+//        System.out.println("_________");
     }
 
     public static void main(String[] args)
